@@ -66,7 +66,7 @@ class State:
                 self.add_result_state(False, i, j)
                 
     def add_result_state(self, passes, x, y):
-        result = self.result_state(self, passes, x, y)
+        result = self.result_state(passes, x, y)
         if result is not None:
             self.possible_moves.append([passes, x, y, result])
     
@@ -173,7 +173,7 @@ class State:
                 score += colour*len(group)+self.board[x,y]
         return score - 6.5  
     
-    def print_state(self): #this just blurts emojis into to the console, should this be improved?
+    def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
             print('\N{Black Square Button}', end = '')
         print('')
@@ -227,17 +227,65 @@ class Game:
             print(self.state.score())
         print(self.winner())
 
+
 class Agent(abc.ABC):
     def move(self, state):
         pass
 
-#game with RandomAgents will  end because they will never pass a turn
+
+# game with RandomAgents will  end because they will never pass a turn
 class RandomAgent(Agent):
     def move(self, state):
         return False, random.randrange(state.boardsize), random.randrange(state.boardsize)
 
-#TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 
+class NeuralNetworkAgent(Agent):
+    def __init__(self):
+        from neuralnetwork import NeuralNetwork
+        self.nn = NeuralNetwork(load=True)
+
+    def move(self, state):
+        best_move = None
+        max_score = 0
+        for move in state.get_possible_moves():
+            score = self.nn.predict(move[3])[0]
+            if score > max_score:
+                max_score = score
+                best_move = move
+        return best_move[0], best_move[1], best_move[2]
+
+
+class TrainingNeuralNetworkAgent(Agent):
+    def __init__(self):
+        from neuralnetwork import NeuralNetwork
+        self.nn = NeuralNetwork(load=False, learning_rate=0.5, inputs=9*9)
+        self.epsilon = 1
+        self.d_epsilon = 0.9999
+
+    def move(self, state):
+        possible_moves = state.get_possible_moves()
+        try:
+            best_move = random.choice(list(possible_moves))
+        except IndexError:
+            print(len(list(possible_moves)))
+            print(possible_moves)
+            raise
+        max_score = 0
+        self.epsilon *= self.d_epsilon
+        if np.random.rand() >= self.epsilon:
+            for move in possible_moves:
+                score = self.nn.predict(move[3])[0]
+                self.nn.memorize(move[3], move[3].score())
+                self.nn.learn()
+                if score > max_score:
+                    max_score = score
+                    best_move = move
+        else:
+            self.nn.memorize(best_move[3], best_move[3].score())
+        return best_move[0], best_move[1], best_move[2]
+
+
+# TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    test = Game(RandomAgent(), RandomAgent())
+    test = Game(TrainingNeuralNetworkAgent(), RandomAgent(), boardsize=9)
     test.run_game()
