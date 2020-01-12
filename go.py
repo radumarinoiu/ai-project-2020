@@ -1,5 +1,47 @@
 import numpy as np, random, queue, abc
 
+import tkinter as tk
+
+board = [[None for j in range(19)] for i in range(19)]  # separate board for gui
+
+def draw_white(i, j, event):
+    event.widget.config(bg="white")
+    board[i][j] = "white"
+
+def draw_black(i, j, event):
+    event.widget.config(bg="white")
+    board[i][j] = "white"
+
+def draw_grey(i, j, event):
+    event.widget.config(bg="grey")
+    board[i][j] = "grey"
+
+def draw_board(board): # TODO: Make it run in the same window and clean up code
+    root = tk.Tk()
+    root.title("Go")
+    root.geometry("345x400")
+    root.configure(background='grey')
+    for i, row in enumerate(board):
+        for j, column in enumerate(row):
+            if board[i][j] == "grey":
+                # L = tk.Label(root, text='    ', bg='grey')
+                # L.grid(row=i, column=j)
+                # L.bind('<Button-1>', lambda e, i=i, j=j: draw_grey(i, j, e))
+                pass
+            elif board[i][j] == "black":
+                L = tk.Label(root, text='    ', bg='black')
+                L.grid(row=i, column=j)
+                L.bind('<Button-1>', lambda e, i=i, j=j: draw_black(i, j, e))
+            elif board[i][j] == "white":
+                L = tk.Label(root, text='    ', bg='white')
+                L.grid(row=i, column=j)
+                L.bind('<Button-1>', lambda e, i=i, j=j: draw_white(i, j, e))
+
+    root.update()
+    root.after(20, test.run_game())
+    root.after(10, draw_board(board))
+    root.mainloop()
+
 class State:
     def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state):
         self.boardsize = boardsize
@@ -177,6 +219,7 @@ class Game:
             self.state.clear_possible_moves()
             self.state = result
             self.state.print_state()
+            #draw_board(board)
             print(self.state.score())
         print(self.winner())
 
