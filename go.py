@@ -53,6 +53,10 @@ class State:
         self.possible_moves = []
         self.finished = False
         
+    def get_possible_moves(self):
+        self.add_possible_moves()
+        return self.possible_moves
+        
     def add_possible_moves(self):
         if len(self.possible_moves) > 0:
             return
@@ -64,7 +68,7 @@ class State:
     def add_result_state(self, passes, x, y):
         result = self.result_state(self, passes, x, y)
         if result != None:
-            self.possible_moves.append(result)
+            self.possible_moves.append([passes, x, y, result])
     
     def result_state(self, passes, x, y):
         if self.board[x,y] != 0:
