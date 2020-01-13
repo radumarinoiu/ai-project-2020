@@ -95,7 +95,7 @@ class State:
     
     def move_is_ko_legal(self, x_coord, y_coord):
         checked_state = self.previous_state
-        while checked_state != None:
+        while checked_state is not None:
             if checked_state.empty_fields == self.empty_fields:
                 if self.board_is_equal(checked_state.board):
                     return False
@@ -215,7 +215,7 @@ class Game:
     def run_game(self):
         while not self.state.finished:
             result = None
-            while result == None:
+            while result is None:
                 if self.state.active_player == 1:
                     passes, x, y = self.agent_one.move(self.state)
                 else:
@@ -239,5 +239,6 @@ class RandomAgent(Agent):
 
 #TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 
-test = Game(RandomAgent(), RandomAgent())
-test.run_game()
+if __name__ == '__main__':
+    test = Game(RandomAgent(), RandomAgent())
+    test.run_game()
