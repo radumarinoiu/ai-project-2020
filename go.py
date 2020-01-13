@@ -66,12 +66,12 @@ class State:
                 self.add_result_state(False, i, j)
                 
     def add_result_state(self, passes, x, y):
-        result = self.result_state(self, passes, x, y)
+        result = self.result_state(passes, x, y)
         if result != None:
             self.possible_moves.append([passes, x, y, result])
     
     def result_state(self, passes, x, y):
-        if self.board[x,y] != 0:
+        if self.board[x,y] != 0 and not passes:
             return None
         new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self)
         if new_state.make_move(passes, x, y):
@@ -79,8 +79,9 @@ class State:
         return None
         
     def make_move(self, passes, x, y):
-        if passes and self.passed:
-            self.finished = True
+        if passes:
+            if self.passed:
+                self.finished = True
         elif self.board[x,y] == 0:
             self.board[x, y] = self.active_player
             self.empty_fields += self.remove_all_encircled(x, y)-1
