@@ -175,7 +175,7 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score - 6.5  
+        return score
     
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -248,14 +248,16 @@ class RandomAgent(Agent):
 
 
 class NeuralNetworkAgent(Agent):
-    def __init__(self):
+    def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
-        self.nn = NeuralNetwork(load=True)
+        self.name = name
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=board_size ** 2)
 
     def move(self, state):
-        best_move = None
+        possible_moves = state.get_possible_moves()
         max_score = 0
-        for move in state.get_possible_moves():
+        best_move = possible_moves[0]
+        for move in possible_moves:
             score = self.nn.predict(move[3])[0]
             if score > max_score:
                 max_score = score
@@ -288,7 +290,6 @@ class TrainingNeuralNetworkAgent(Agent):
             for move in possible_moves:
                 score = self.nn.predict(move[3])[0]
                 self.nn.memorize(move[3], move[3].score())
-                self.nn.learn()
                 if score > max_score:
                     max_score = score
                     best_move = move
@@ -297,24 +298,39 @@ class TrainingNeuralNetworkAgent(Agent):
         return best_move[0], best_move[1], best_move[2]
 
 
-# TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
-if __name__ == '__main__':
+def learn_to_play():
+    while True:
+        board_size = 18
+        test = Game(
+            TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
+            TrainingNeuralNetworkAgent(name="agent2", board_size=board_size),
+            boardsize=board_size)
+        test.run_game()
+        test.agent_one.save()
+        test.agent_two.save()
+
+
+def just_play():
     player1_wins = 0
     player2_wins = 0
     for i in range(10):
         board_size = 18
         test = Game(
-            TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
+            NeuralNetworkAgent(name="agent1", board_size=board_size),
+            # NeuralNetworkAgent(name="agent2", board_size=board_size),
             RandomAgent(),
-            # TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
+            # RandomAgent(),
             boardsize=board_size)
         test.run_game()
         if test.winner() == -1:
             player1_wins += 1
         if test.winner() == 1:
             player2_wins += 1
-        test.agent_one.save()
-        # test.agent_two.save()
-        # time.sleep(3)
     print("Player1 wins:", player1_wins)
     print("Player2 wins:", player2_wins)
+
+
+# TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
+if __name__ == '__main__':
+    learn_to_play()
+    # just_play()
