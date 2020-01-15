@@ -5,15 +5,15 @@ from keras.layers import Dense
 
 
 class NeuralNetwork(object):
-    def __init__(self, inputs=None, load=False, learning_rate=0.5):
+    def __init__(self, name, inputs=None, load=False, learning_rate=0.5):
         if load:
             # load json and create model
-            json_file = open('model.json', 'r')
+            json_file = open("model_{}.json".format(name), 'r')
             loaded_model_json = json_file.read()
             json_file.close()
             loaded_model = model_from_json(loaded_model_json)
             # load weights into new model
-            loaded_model.load_weights("model.h5")
+            loaded_model.load_weights("model_{}.h5".format(name))
             print("Loaded model from disk")
             self.model = loaded_model
         else:
@@ -43,3 +43,11 @@ class NeuralNetwork(object):
         )
         self.memory = [[], []]
         print("Learned")
+
+    def save(self, name):
+        print("Saving model...")
+        model_json = self.model.to_json()
+        with open("model_{}.json".format(name), "w") as json_file:
+            json_file.write(model_json)
+        self.model.save_weights("model_{}.h5".format(name))
+        print("Saved model to disk\n")

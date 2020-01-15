@@ -1,3 +1,5 @@
+import time
+
 import numpy as np, random, queue, abc
 
 import tkinter as tk
@@ -63,7 +65,8 @@ class State:
         self.add_result_state(True, 0, 0)
         for i in range(self.boardsize):
             for j in range(self.boardsize):
-                self.add_result_state(False, i, j)
+                if self.result_state(False, i, j):
+                    self.add_result_state(False, i, j)
                 
     def add_result_state(self, passes, x, y):
         result = self.result_state(passes, x, y)
@@ -184,7 +187,7 @@ class State:
                 if field == 0:
                     print('\N{IDEOGRAPHIC SPACE}', end = '')
                 elif field == 1:
-                    print('\N{Medium Black Circle}', end = '')
+                    print('\N{MULTIPLICATION SIGN IN DOUBLE CIRCLE}', end = '')
                 elif field == -1:
                     print('\N{Medium White Circle}', end = '')
             print('\N{Black Square Button}')
@@ -198,7 +201,7 @@ class State:
     
 
 class Game:
-    def __init__(self, agent_one, agent_two, boardsize = 19):
+    def __init__(self, agent_one, agent_two, boardsize=19):
         self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize, False, None)
         self.agent_one = agent_one
         self.agent_two = agent_two
@@ -226,7 +229,11 @@ class Game:
             self.state.print_state()
             #draw_board(board)
             print(self.state.score())
-        print(self.winner())
+        winner = self.winner()
+        if winner == 0:
+            print("Draw?")
+        else:
+            print("Player {} won".format(winner))
 
 
 class Agent(abc.ABC):
@@ -237,7 +244,7 @@ class Agent(abc.ABC):
 # game with RandomAgents will  end because they will never pass a turn
 class RandomAgent(Agent):
     def move(self, state):
-        return False, random.randrange(state.boardsize), random.randrange(state.boardsize)
+        return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 
 class NeuralNetworkAgent(Agent):
@@ -257,11 +264,15 @@ class NeuralNetworkAgent(Agent):
 
 
 class TrainingNeuralNetworkAgent(Agent):
-    def __init__(self):
+    def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
-        self.nn = NeuralNetwork(load=False, learning_rate=0.5, inputs=9*9)
+        self.name = name
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=board_size ** 2)
         self.epsilon = 1
         self.d_epsilon = 0.9999
+
+    def save(self):
+        self.nn.save(self.name)
 
     def move(self, state):
         possible_moves = state.get_possible_moves()
@@ -288,5 +299,22 @@ class TrainingNeuralNetworkAgent(Agent):
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    test = Game(TrainingNeuralNetworkAgent(), RandomAgent(), boardsize=9)
-    test.run_game()
+    player1_wins = 0
+    player2_wins = 0
+    for i in range(10):
+        board_size = 18
+        test = Game(
+            TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
+            RandomAgent(),
+            # TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
+            boardsize=board_size)
+        test.run_game()
+        if test.winner() == -1:
+            player1_wins += 1
+        if test.winner() == 1:
+            player2_wins += 1
+        test.agent_one.save()
+        # test.agent_two.save()
+        # time.sleep(3)
+    print("Player1 wins:", player1_wins)
+    print("Player2 wins:", player2_wins)
