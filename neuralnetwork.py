@@ -1,12 +1,24 @@
+import os
 import numpy as np
+
+import tensorflow as tf
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+
+    except RuntimeError as e:
+        print(e)
+
 from keras.optimizers import Adam
 from keras.models import Sequential, model_from_json
-from keras.layers import Dense
+from keras.layers import Dense, Conv2D, Flatten
 
 
 class NeuralNetwork(object):
     def __init__(self, name, inputs=None, load=False, learning_rate=0.5):
-        if load:
+        if load and os.path.exists("model_{}.json".format(name)) and os.path.exists("model_{}.h5".format(name)):
             # load json and create model
             json_file = open("model_{}.json".format(name), 'r')
             loaded_model_json = json_file.read()
@@ -18,36 +30,39 @@ class NeuralNetwork(object):
             self.model = loaded_model
         else:
             self.model = Sequential()
-            self.model.add(Dense(100, activation="relu", input_shape=(inputs,)))
-            self.model.add(Dense(100, activation="relu"))
+            self.model.add(Conv2D(64, (3, 3), input_shape=inputs))
+            self.model.add(Flatten())
+            # self.model.add(Dense(80, activation="relu", input_shape=(inputs,)))
+            self.model.add(Dense(512, activation="relu"))
+            self.model.add(Dense(128, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
         self.model.compile(loss='mae', optimizer=Adam(lr=learning_rate), metrics=["accuracy"])
         self.memory = [[], []]
 
     def predict(self, inp):
-        return self.model.predict(np.array([inp.board.flatten()]))
+        return self.model.predict(inp)
 
     def memorize(self, inp, out):
-        self.memory[0].append(inp.board.flatten())
+        self.memory[0].append(inp)
         self.memory[1].append(out)
-        if len(self.memory[0]) > 5000:
+        if len(self.memory[0]) > 100:
             self.learn()
 
     def learn(self):
-        print("Learning...")
+        # print("Learning...")
         self.model.fit(
             np.array(self.memory[0]),
             np.array(self.memory[1]),
             epochs=1, verbose=0
-        )
+        ).history
         self.memory = [[], []]
-        print("Learned")
+        # print("Learned")
 
     def save(self, name):
-        print("Saving model...")
+        # print("Saving model...")
         model_json = self.model.to_json()
         with open("model_{}.json".format(name), "w") as json_file:
             json_file.write(model_json)
         self.model.save_weights("model_{}.h5".format(name))
-        print("Saved model to disk\n")
+        # print("Saved model to disk\n")
