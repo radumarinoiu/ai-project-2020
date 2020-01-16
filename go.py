@@ -1,8 +1,4 @@
-import time
-
-import numpy as np, random, queue, abc
-
-import tkinter as tk
+import numpy as np, tkinter as tk, random, queue, abc, time, math
 
 board = [[None for j in range(19)] for i in range(19)]  # separate board for gui
 
@@ -54,6 +50,17 @@ class State:
         self.previous_state = previous_state
         self.possible_moves = []
         self.finished = False
+        self.times_visited = 0
+        self.value = None
+        
+    def winner(self):
+        score = self.score()
+        if score == 0:
+            return 0
+        elif score > 0:
+            return 1
+        else:
+            return -1
         
     def get_possible_moves(self):
         self.add_possible_moves()
@@ -65,8 +72,7 @@ class State:
         self.add_result_state(True, 0, 0)
         for i in range(self.boardsize):
             for j in range(self.boardsize):
-                if self.result_state(False, i, j):
-                    self.add_result_state(False, i, j)
+                self.add_result_state(False, i, j)
                 
     def add_result_state(self, passes, x, y):
         result = self.result_state(passes, x, y)
@@ -175,7 +181,7 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score
+        return score - 0.5 #break ties, second mover has disadvantage
     
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -187,7 +193,7 @@ class State:
                 if field == 0:
                     print('\N{IDEOGRAPHIC SPACE}', end = '')
                 elif field == 1:
-                    print('\N{MULTIPLICATION SIGN IN DOUBLE CIRCLE}', end = '')
+                    print('\N{Medium Black Circle}', end = '')
                 elif field == -1:
                     print('\N{Medium White Circle}', end = '')
             print('\N{Black Square Button}')
@@ -205,15 +211,7 @@ class Game:
         self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize, False, None)
         self.agent_one = agent_one
         self.agent_two = agent_two
-    
-    def winner(self):
-        score = self.state.score()
-        if score == 0:
-            return 0
-        elif score > 0:
-            return 1
-        else:
-            return -1
+
         
     def run_game(self):
         while not self.state.finished:
@@ -229,7 +227,7 @@ class Game:
             self.state.print_state()
             #draw_board(board)
             print(self.state.score())
-        winner = self.winner()
+        winner = self.state.winner()
         if winner == 0:
             print("Draw?")
         else:
@@ -241,83 +239,92 @@ class Agent(abc.ABC):
         pass
 
 
-# game with RandomAgents will  end because they will never pass a turn
 class RandomAgent(Agent):
     def move(self, state):
         return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
-
-class NeuralNetworkAgent(Agent):
-    def __init__(self, name, board_size=9):
+class MCTSAgent(Agent):
+    def __init__(self, name, board_size=19, processing_time = 100.0, visited_states = 1000, exploration = 1.4, use_network = True):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=board_size ** 2)
-
-    def move(self, state):
-        possible_moves = state.get_possible_moves()
-        max_score = 0
-        best_move = possible_moves[0]
-        for move in possible_moves:
-            score = self.nn.predict(move[3])[0]
-            if score > max_score:
-                max_score = score
-                best_move = move
-        return best_move[0], best_move[1], best_move[2]
-
-
-class TrainingNeuralNetworkAgent(Agent):
-    def __init__(self, name, board_size=9):
-        from neuralnetwork import NeuralNetwork
-        self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=board_size ** 2)
-        self.epsilon = 1
-        self.d_epsilon = 0.9999
+        self.nn = NeuralNetwork(name=self.name, boardsize = board_size, load=False)
+        self.processing_time = processing_time
+        self.visited_states = visited_states
+        self.exploration = exploration
+        self.use_network = use_network
 
     def save(self):
         self.nn.save(self.name)
-
+        
+    def priority_value(self, state):
+        return state.value + self.exploration * math.sqrt(math.log(state.previous_state.times_visited)/state.times_visited)
+        
     def move(self, state):
-        possible_moves = state.get_possible_moves()
-        try:
-            best_move = random.choice(list(possible_moves))
-        except IndexError:
-            print(len(list(possible_moves)))
-            print(possible_moves)
-            raise
-        max_score = 0
-        self.epsilon *= self.d_epsilon
-        if np.random.rand() >= self.epsilon:
-            for move in possible_moves:
-                score = self.nn.predict(move[3])[0]
-                self.nn.memorize(move[3], move[3].score())
-                if score > max_score:
-                    max_score = score
-                    best_move = move
-        else:
-            self.nn.memorize(best_move[3], best_move[3].score())
-        return best_move[0], best_move[1], best_move[2]
-
+        start_time = time.time()
+        state.value = 0.5
+        while time.time() - start_time < self.processing_time and state.times_visited < self.visited_states:
+            current_state = state
+            while current_state.times_visited > 1:
+                max_value = -1000
+                max_state = None
+                for _,_,_,s in current_state.get_possible_moves():
+                    if self.priority_value(s) > max_value:
+                        max_value = self.priority_value(s)
+                        max_state = s
+                current_state = max_state
+            total = 0
+            number_of_children = 0
+            for _,_,_,s in current_state.get_possible_moves():
+                if s.finished or not self.use_network:
+                    s.value = (s.active_player * s.winner() + 1)/2
+                else:
+                    s.value = self.nn.predict(s)[0]
+                s.times_visited += 1
+                total += s.value
+                number_of_children += 1
+            while current_state != state.previous_state:
+                total = number_of_children-total
+                current_state.value = (total + current_state.value * current_state.times_visited) / (current_state.times_visited + number_of_children)
+                current_state.times_visited += number_of_children
+                current_state = current_state.previous_state
+        max_visited = 0
+        max_move = None
+        for passes, x, y, s in state.get_possible_moves():
+            if s.times_visited > max_visited:
+                max_visited = s.times_visited
+                max_move = [passes, x, y]
+        print(state.times_visited)
+        return max_move
+    
+    def learn_from_game(self, end_state):
+        winner = end_state.winner()
+        checked_state = end_state
+        while checked_state is not None:
+            if winner == checked_state.active_player:
+                value = 1
+            else:
+                value = 0
+            self.nn.memorize(checked_state, value)
+            checked_state = checked_state.previous_state
 
 def learn_to_play():
+    board_size = 15
+    our_agent = MCTSAgent(name="mcts", board_size=board_size)
     while True:
-        board_size = 18
-        test = Game(
-            TrainingNeuralNetworkAgent(name="agent1", board_size=board_size),
-            TrainingNeuralNetworkAgent(name="agent2", board_size=board_size),
-            boardsize=board_size)
-        test.run_game()
-        test.agent_one.save()
-        test.agent_two.save()
+        training_game = Game(our_agent, our_agent, boardsize=board_size)
+        training_game.run_game()
+        our_agent.learn_from_game(training_game.state)
+        our_agent.save()
 
 
 def just_play():
     player1_wins = 0
     player2_wins = 0
     for i in range(10):
-        board_size = 18
+        board_size = 15
         test = Game(
-            NeuralNetworkAgent(name="agent1", board_size=board_size),
-            # NeuralNetworkAgent(name="agent2", board_size=board_size),
+            MCTSAgent(name="mcts", board_size=board_size, use_network=False),
+            # NeuralNetworkAgent(name="mcts", board_size=board_size),
             RandomAgent(),
             # RandomAgent(),
             boardsize=board_size)
@@ -330,7 +337,6 @@ def just_play():
     print("Player2 wins:", player2_wins)
 
 
-# TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
     learn_to_play()
     # just_play()
