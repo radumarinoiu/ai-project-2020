@@ -5,7 +5,7 @@ from keras.layers import Dense, Conv2D, Flatten
 
 
 class NeuralNetwork(object):
-    def __init__(self, name, boardsize=19, load=False, learning_rate=0.1):
+    def __init__(self, name, boardsize=19, load=False, learning_rate=0.0001):
         if load:
             # load json and create model
             json_file = open("model_{}.json".format(name), 'r')
@@ -30,16 +30,38 @@ class NeuralNetwork(object):
         self.memory = [[], []]
         
     def prepare_inputs(self, inp):
-        array = np.array([inp.board == inp.active_player, inp.board == -inp.active_player, np.full((inp.boardsize, inp.boardsize), (inp.active_player+1)/2)], dtype = np.int32)
+        array = np.array([inp.board == 1, inp.board == -1, np.full((inp.boardsize, inp.boardsize), (inp.active_player+1)/2)], dtype = np.int32)
         return np.moveaxis(array, 0, -1)
 
     def predict(self, inp):
         return self.model.predict(np.array([self.prepare_inputs(inp)]))
 
-    def memorize(self, inp, out):
-        self.memory[0].append(self.prepare_inputs(inp))
+    def memorize(self, inp, out): #go is a game symmetrical to rotation as well as flipping of the board
+        prepared = self.prepare_inputs(inp)
+        self.memory[0].append(prepared)
         self.memory[1].append(out)
-        if len(self.memory[0]) > 300:
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.flip(prepared, axis = 0)
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        prepared = np.rot90(prepared, k=1, axes=(0, 1))
+        self.memory[0].append(prepared)
+        self.memory[1].append(out)
+        if len(self.memory[0]) > 1000:
             self.learn()
 
     def learn(self):

@@ -14,7 +14,7 @@ def draw_grey(i, j, event):
     event.widget.config(bg="grey")
     board[i][j] = "grey"
 
-def draw_board(board): # TODO: Make it run in the same window and clean up code
+def draw_board(board):
     root = tk.Tk()
     root.title("Go")
     root.geometry("345x400")
@@ -36,7 +36,7 @@ def draw_board(board): # TODO: Make it run in the same window and clean up code
                 L.bind('<Button-1>', lambda e, i=i, j=j: draw_white(i, j, e))
 
     root.update()
-    root.after(20, test.run_game())
+    #root.after(20, test.run_game())
     root.after(10, draw_board(board))
     root.mainloop()
 
@@ -224,9 +224,9 @@ class Game:
                 result = self.state.result_state(passes, x, y)
             self.state.clear_possible_moves()
             self.state = result
+            print("Score:", self.state.score())
             self.state.print_state()
             #draw_board(board)
-            print(self.state.score())
         winner = self.state.winner()
         if winner == 0:
             print("Draw?")
@@ -276,9 +276,11 @@ class MCTSAgent(Agent):
             number_of_children = 0
             for _,_,_,s in current_state.get_possible_moves():
                 if s.finished or not self.use_network:
-                    s.value = (s.active_player * s.winner() + 1)/2
+                    s.value = (1 - s.active_player * s.winner())/2
                 else:
                     s.value = self.nn.predict(s)[0]
+                    if s.active_player == -1:
+                        s.value = 1 - s.value
                 s.times_visited += 1
                 total += s.value
                 number_of_children += 1
@@ -288,22 +290,21 @@ class MCTSAgent(Agent):
                 current_state.times_visited += number_of_children
                 current_state = current_state.previous_state
         max_visited = 0
+        max_value = -1
         max_move = None
         for passes, x, y, s in state.get_possible_moves():
-            if s.times_visited > max_visited:
+            if s.times_visited > max_visited or (s.times_visited == max_visited and s.value > max_value):
                 max_visited = s.times_visited
+                max_value = s.value
                 max_move = [passes, x, y]
-        print(state.times_visited)
+        print("Number of states visited:", state.times_visited)
+        print("Likelihood of black winning:", self.nn.predict(state)[0][0])
         return max_move
     
     def learn_from_game(self, end_state):
-        winner = end_state.winner()
+        value = (end_state.winner() + 1)/2
         checked_state = end_state
         while checked_state is not None:
-            if winner == checked_state.active_player:
-                value = 1
-            else:
-                value = 0
             self.nn.memorize(checked_state, value)
             checked_state = checked_state.previous_state
 
@@ -339,4 +340,4 @@ def just_play():
 
 if __name__ == '__main__':
     learn_to_play()
-    # just_play()
+    #just_play()
