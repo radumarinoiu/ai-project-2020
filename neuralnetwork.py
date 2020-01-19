@@ -11,7 +11,7 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
-from keras.optimizers import Adam
+from keras.optimizers import Adam, Adagrad
 from keras.models import Sequential, model_from_json
 from keras.layers import Dense, Conv2D, Flatten
 
@@ -37,7 +37,7 @@ class NeuralNetwork(object):
             self.model.add(Dense(128, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
-        self.model.compile(loss='mae', optimizer=Adam(lr=learning_rate), metrics=["accuracy"])
+        self.model.compile(loss='mae', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
         self.memory = [[], []]
 
     def predict(self, inp):

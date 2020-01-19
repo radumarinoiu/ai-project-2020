@@ -275,7 +275,7 @@ class TrainingNeuralNetworkAgent(Agent):
     def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.1, inputs=(board_size, board_size, 1))
         self.epsilon = 1
         self.d_epsilon = 0.9999
 
@@ -335,8 +335,8 @@ def just_play():
     player2_wins = 0
 
     # agent1 = RandomAgent()
-    agent1 = RandomAgent()
-    agent2 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
+    agent2 = RandomAgent()
+    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
 
     for i in range(300):
         test = Game(
