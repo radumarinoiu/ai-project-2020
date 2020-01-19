@@ -18,7 +18,7 @@ class NeuralNetwork(object):
             self.model = loaded_model
         else:
             self.model = Sequential()
-            self.model.add(Conv2D(16, (5,5), strides=(1, 1), activation='relu', input_shape=(boardsize, boardsize,3)))
+            self.model.add(Conv2D(16, (5,5), strides=(1, 1), activation='relu', input_shape=(boardsize, boardsize, 4)))
             self.model.add(Conv2D(32, (5,5), strides=(1, 1), activation='relu'))
             self.model.add(Conv2D(64, (5,5), strides=(1, 1), activation='relu'))
             self.model.add(Conv2D(1, (1,1), strides=(1, 1), activation='relu'))
@@ -29,39 +29,44 @@ class NeuralNetwork(object):
         self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate), metrics=["accuracy"])
         self.memory = [[], []]
         
-    def prepare_inputs(self, inp):
-        array = np.array([inp.board == 1, inp.board == -1, np.full((inp.boardsize, inp.boardsize), (inp.active_player+1)/2)], dtype = np.int32)
+    def prepare_inputs_black(self, inp):
+        array = np.array([inp.board == 1, 
+                          inp.board == -1, 
+                          np.full((inp.boardsize, inp.boardsize), (inp.active_player+1)/2), 
+                          np.full((inp.boardsize, inp.boardsize), int(inp.passed))], dtype = np.int32)
+        return np.moveaxis(array, 0, -1)
+    
+    def prepare_inputs_white(self, inp):
+        array = np.array([inp.board == -1, 
+                          inp.board == 1, 
+                          np.full((inp.boardsize, inp.boardsize), (-inp.active_player+1)/2), 
+                          np.full((inp.boardsize, inp.boardsize), int(inp.passed))], dtype = np.int32)
         return np.moveaxis(array, 0, -1)
 
     def predict(self, inp):
-        return self.model.predict(np.array([self.prepare_inputs(inp)]))
+        return self.model.predict(np.array([self.prepare_inputs_black(inp)]))
+    
+    def memorize_rotated(self, inp, out):
+        self.memory[0].append(inp)
+        self.memory[1].append(out)
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory[0].append(inp)
+        self.memory[1].append(out)
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory[0].append(inp)
+        self.memory[1].append(out)
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory[0].append(inp)
+        self.memory[1].append(out)
+        
+    def memorize_flipped_rotated(self, inp, out):
+        self.memorize_rotated(inp, out)
+        self.memorize_rotated(np.flip(inp, axis = 0), out)
 
-    def memorize(self, inp, out): #go is a game symmetrical to rotation as well as flipping of the board
-        prepared = self.prepare_inputs(inp)
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.flip(prepared, axis = 0)
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        prepared = np.rot90(prepared, k=1, axes=(0, 1))
-        self.memory[0].append(prepared)
-        self.memory[1].append(out)
-        if len(self.memory[0]) > 1000:
+    def memorize(self, inp, out): #go is a game symmetrical to rotation, flipping of the board and exchange of colors
+        self.memorize_flipped_rotated(self.prepare_inputs_black(inp), out)
+        self.memorize_flipped_rotated(self.prepare_inputs_white(inp), 1-out)
+        if len(self.memory[0]) > 10000:
             self.learn()
 
     def learn(self):

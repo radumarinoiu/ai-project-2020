@@ -52,6 +52,8 @@ class State:
         self.finished = False
         self.times_visited = 0
         self.value = None
+        self.move_candidates = [np.full((boardsize, boardsize), True), True]
+        self.candidates_evaluated = 0
         
     def winner(self):
         score = self.score()
@@ -67,17 +69,23 @@ class State:
         return self.possible_moves
         
     def add_possible_moves(self):
-        if len(self.possible_moves) > 0:
-            return
-        self.add_result_state(True, 0, 0)
+        if self.move_candidates[1]:
+            self.add_result_state(True, 0, 0)
         for i in range(self.boardsize):
             for j in range(self.boardsize):
-                self.add_result_state(False, i, j)
+                if self.move_candidates[0][i, j]:
+                    self.add_result_state(False, i, j)
                 
     def add_result_state(self, passes, x, y):
+        self.candidates_evaluated += 1
+        if passes:
+            self.move_candidates[1] = False
+        else:
+            self.move_candidates[0][x, y] = False
         result = self.result_state(passes, x, y)
         if result is not None:
             self.possible_moves.append([passes, x, y, result])
+        return result
     
     def result_state(self, passes, x, y):
         if self.board[x,y] != 0 and not passes:
@@ -181,7 +189,7 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score - 0.5 #break ties, second mover has disadvantage
+        return score # - 0.5 break ties, second mover has disadvantage
     
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -207,26 +215,36 @@ class State:
     
 
 class Game:
-    def __init__(self, agent_one, agent_two, boardsize=19):
+    def __init__(self, agent_one, agent_two, boardsize=19, concede_threshold = None):
         self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize, False, None)
         self.agent_one = agent_one
         self.agent_two = agent_two
+        self.concede_threshold = concede_threshold
+        self.turn = 0
 
         
     def run_game(self):
         while not self.state.finished:
             result = None
+            passes = True
+            x = 0
+            y = 0
             while result is None:
                 if self.state.active_player == 1:
                     passes, x, y = self.agent_one.move(self.state)
                 else:
                     passes, x, y = self.agent_two.move(self.state)
                 result = self.state.result_state(passes, x, y)
+            self.turn += 1
+            print("Player", (-self.state.active_player + 3)/2, "makes move:", passes, x, y)
             self.state.clear_possible_moves()
             self.state = result
+            score = self.state.score()
             print("Score:", self.state.score())
             self.state.print_state()
             #draw_board(board)
+            if self.concede_threshold is not None and self.turn > 10 and self.concede_threshold <= abs(score):
+                break
         winner = self.state.winner()
         if winner == 0:
             print("Draw?")
@@ -244,14 +262,22 @@ class RandomAgent(Agent):
         return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 class MCTSAgent(Agent):
-    def __init__(self, name, board_size=19, processing_time = 100.0, visited_states = 1000, exploration = 1.4, use_network = True):
+    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 1.4):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, boardsize = board_size, load=False)
+        self.boardsize = boardsize
+        self.nn = NeuralNetwork(name=self.name, boardsize = boardsize, load=False)
         self.processing_time = processing_time
         self.visited_states = visited_states
         self.exploration = exploration
-        self.use_network = use_network
+        self.priority_list = []
+        for i in range(boardsize):
+            for j in range(boardsize):
+                self.priority_list.append([False, i, j])
+        self.priority_list.append([True, 0, 0])
+        self.priority_list = np.array(self.priority_list)
+        self.values = np.zeros((boardsize, boardsize))
+        self.pass_value = 0
 
     def save(self):
         self.nn.save(self.name)
@@ -263,8 +289,9 @@ class MCTSAgent(Agent):
         start_time = time.time()
         state.value = 0.5
         while time.time() - start_time < self.processing_time and state.times_visited < self.visited_states:
+            #SELECTION
             current_state = state
-            while current_state.times_visited > 1:
+            while current_state.candidates_evaluated == self.boardsize*self.boardsize+1:
                 max_value = -1000
                 max_state = None
                 for _,_,_,s in current_state.get_possible_moves():
@@ -272,31 +299,47 @@ class MCTSAgent(Agent):
                         max_value = self.priority_value(s)
                         max_state = s
                 current_state = max_state
-            total = 0
-            number_of_children = 0
-            for _,_,_,s in current_state.get_possible_moves():
-                if s.finished or not self.use_network:
-                    s.value = (1 - s.active_player * s.winner())/2
-                else:
-                    s.value = self.nn.predict(s)[0]
-                    if s.active_player == -1:
-                        s.value = 1 - s.value
-                s.times_visited += 1
-                total += s.value
-                number_of_children += 1
+            #EXPANSION: use priority list to determine next move to evaluate, 
+            #previous high scoring moves are prefered
+            while True:
+                passes, x, y = self.priority_list[current_state.candidates_evaluated]
+                result = current_state.add_result_state(passes, x, y)
+                if result is not None:
+                    break
+            #SIMULATION: instead of random playouts
+            #a network trained to predict the winning probabilites deteremines the values
+            if result.finished:
+                result.value = (1 + result.winner())/2
+            else:
+                result.value = self.nn.predict(result)[0]
+            if result.active_player == 1:
+                    result.value = 1 - result.value
+            #BACKPROPAGATION
+            current_state = result
+            value = result.value
             while current_state != state.previous_state:
-                total = number_of_children-total
-                current_state.value = (total + current_state.value * current_state.times_visited) / (current_state.times_visited + number_of_children)
-                current_state.times_visited += number_of_children
+                current_state.value = (current_state.value * current_state.times_visited + value) / (current_state.times_visited + 1)
+                current_state.times_visited += 1
                 current_state = current_state.previous_state
+                value = 1 - value
         max_visited = 0
-        max_value = -1
         max_move = None
         for passes, x, y, s in state.get_possible_moves():
-            if s.times_visited > max_visited or (s.times_visited == max_visited and s.value > max_value):
-                max_visited = s.times_visited
-                max_value = s.value
+            print(passes, x, y, s.times_visited)
+            new_value = s.times_visited + s.value
+            if passes:
+                self.pass_value = new_value
+            else:
+                self.values[x, y] = new_value
+            if new_value > max_visited:
+                max_visited = new_value
                 max_move = [passes, x, y]
+        #Update priority_list
+        self.priority_list = []
+        sorted = np.dstack(np.unravel_index(np.argsort(self.values, axis = None),(self.boardsize, self.boardsize)))[0]
+        for i, j in sorted:
+            self.priority_list.append([False, i, j])
+        self.priority_list.append([True, 0, 0])
         print("Number of states visited:", state.times_visited)
         print("Likelihood of black winning:", self.nn.predict(state)[0][0])
         return max_move
@@ -307,12 +350,13 @@ class MCTSAgent(Agent):
         while checked_state is not None:
             self.nn.memorize(checked_state, value)
             checked_state = checked_state.previous_state
+        self.nn.learn()
 
 def learn_to_play():
-    board_size = 15
-    our_agent = MCTSAgent(name="mcts", board_size=board_size)
+    boardsize = 15
+    our_agent = MCTSAgent(name="mcts", boardsize=boardsize)
     while True:
-        training_game = Game(our_agent, our_agent, boardsize=board_size)
+        training_game = Game(our_agent, our_agent, boardsize=boardsize)
         training_game.run_game()
         our_agent.learn_from_game(training_game.state)
         our_agent.save()
@@ -322,13 +366,13 @@ def just_play():
     player1_wins = 0
     player2_wins = 0
     for i in range(10):
-        board_size = 15
+        boardsize = 15
         test = Game(
-            MCTSAgent(name="mcts", board_size=board_size, use_network=False),
+            MCTSAgent(name="mcts", boardsize=boardsize, concede_threshold = 25),
             # NeuralNetworkAgent(name="mcts", board_size=board_size),
             RandomAgent(),
             # RandomAgent(),
-            boardsize=board_size)
+            boardsize=boardsize)
         test.run_game()
         if test.winner() == -1:
             player1_wins += 1
