@@ -31,13 +31,15 @@ class NeuralNetwork(object):
         else:
             self.model = Sequential()
             self.model.add(Conv2D(64, (3, 3), input_shape=inputs))
+            self.model.add(Conv2D(32, (2, 2)))
+            self.model.add(Conv2D(16, (2, 2)))
             self.model.add(Flatten())
             # self.model.add(Dense(80, activation="relu", input_shape=(inputs,)))
             self.model.add(Dense(512, activation="relu"))
             self.model.add(Dense(128, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
-        self.model.compile(loss='mae', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
+        self.model.compile(loss='mse', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
         self.memory = [[], []]
 
     def predict(self, inp):
@@ -46,7 +48,7 @@ class NeuralNetwork(object):
     def memorize(self, inp, out):
         self.memory[0].append(inp)
         self.memory[1].append(out)
-        if len(self.memory[0]) > 100:
+        if len(self.memory[0]) >= 1:
             self.learn()
 
     def learn(self):
@@ -54,8 +56,8 @@ class NeuralNetwork(object):
         self.model.fit(
             np.array(self.memory[0]),
             np.array(self.memory[1]),
-            epochs=1, verbose=0
-        ).history
+            epochs=1, verbose=0, batch_size=1
+        )
         self.memory = [[], []]
         # print("Learned")
 
@@ -65,4 +67,4 @@ class NeuralNetwork(object):
         with open("model_{}.json".format(name), "w") as json_file:
             json_file.write(model_json)
         self.model.save_weights("model_{}.h5".format(name))
-        # print("Saved model to disk\n")
+        print("\nSaved model to disk\n")

@@ -45,7 +45,7 @@ def draw_board(board): # TODO: Make it run in the same window and clean up code
     root.mainloop()
 
 class State:
-    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state):
+    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state, starting_player=1):
         self.boardsize = boardsize
         self.board = board.copy()
         self.active_player = active_player
@@ -54,6 +54,7 @@ class State:
         self.previous_state = previous_state
         self.possible_moves = []
         self.finished = False
+        self.starting_player = starting_player
         
     def get_possible_moves(self):
         self.add_possible_moves()
@@ -76,7 +77,7 @@ class State:
     def result_state(self, passes, x, y):
         if self.board[x,y] != 0 and not passes:
             return None
-        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self)
+        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self, self.starting_player)
         if new_state.make_move(passes, x, y):
             return new_state
         return None
@@ -175,7 +176,7 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score + 6.5
+        return score + 6.5 * self.starting_player
     
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -202,7 +203,8 @@ class State:
 
 class Game:
     def __init__(self, agent_one, agent_two, boardsize=19):
-        self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize, False, None)
+        starting_player = 1 if np.random.randint(0, 2) else -1
+        self.state = State(boardsize, np.zeros((boardsize, boardsize)), starting_player, boardsize*boardsize, False, None, starting_player)
         self.agent_one = agent_one
         self.agent_two = agent_two
         self.moves_counter = 0
@@ -235,10 +237,10 @@ class Game:
             #draw_board(board)
             # print(self.state.score())
         winner = self.winner()
-        if winner == 0:
-            print("Draw?")
-        else:
-            print("Player {} won".format(winner))
+        # if winner == 0:
+        #     print("Draw?")
+        # else:
+        #     print("Player {} won".format(winner))
 
 
 class Agent(abc.ABC):
@@ -305,38 +307,44 @@ class TrainingNeuralNetworkAgent(Agent):
 
 
 def learn_to_play():
-    board_size = 7
+    board_size = 9
     player1_wins = 0
     player2_wins = 0
 
     agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
     # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=board_size)
     agent2 = RandomAgent()
-
+    game_counter = 0
     while True:
         test = Game(
             agent1,
             agent2,
             boardsize=board_size)
+        print(test.state.score())
         test.run_game()
-        test.agent_one.save()
+        game_counter += 1
+        if game_counter % 100 == 0:
+            test.agent_one.save()
         # test.agent_two.save()
         if test.winner() == 1:
             player1_wins += 1
         if test.winner() == -1:
             player2_wins += 1
-        print("{} : {}".format(player1_wins, player2_wins))
-        print("Epsilon: {} - Moves: {}".format(test.agent_one.epsilon, test.moves_count()))
+        print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
+            game_counter,
+            test.agent_one.epsilon,
+            test.moves_count(),
+            player1_wins, player2_wins))
 
 
 def just_play():
-    board_size = 7
+    board_size = 9
     player1_wins = 0
     player2_wins = 0
 
     # agent1 = RandomAgent()
-    agent2 = RandomAgent()
     agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
+    agent2 = RandomAgent()
 
     for i in range(300):
         test = Game(
@@ -354,5 +362,5 @@ def just_play():
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    # learn_to_play()
-    just_play()
+    learn_to_play()
+    # just_play()
