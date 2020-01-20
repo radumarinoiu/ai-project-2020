@@ -18,10 +18,9 @@ class NeuralNetwork(object):
             self.model = loaded_model
         else:
             self.model = Sequential()
-            self.model.add(Conv2D(16, (5,5), strides=(1, 1), activation='relu', input_shape=(boardsize, boardsize, 4)))
-            self.model.add(Conv2D(32, (5,5), strides=(1, 1), activation='relu'))
-            self.model.add(Conv2D(64, (5,5), strides=(1, 1), activation='relu'))
-            self.model.add(Conv2D(1, (1,1), strides=(1, 1), activation='relu'))
+            self.model.add(Conv2D(16, (3,3), strides=(1, 1), activation='relu', input_shape=(boardsize, boardsize, 4)))
+            self.model.add(Conv2D(32, (3,3), strides=(1, 1), activation='relu'))
+            self.model.add(Conv2D(64, (3,3), strides=(1, 1), activation='relu'))
             self.model.add(Flatten())
             self.model.add(Dense(32, activation='relu'))
             self.model.add(Dense(1, activation='sigmoid'))

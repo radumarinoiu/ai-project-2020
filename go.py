@@ -88,7 +88,7 @@ class State:
         return result
     
     def result_state(self, passes, x, y):
-        if self.board[x,y] != 0 and not passes:
+        if (self.board[x,y] != 0 and not passes) or self.finished:
             return None
         new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self)
         if new_state.make_move(passes, x, y):
@@ -102,13 +102,16 @@ class State:
         elif self.board[x,y] == 0:
             self.board[x, y] = self.active_player
             self.empty_fields += self.remove_all_encircled(x, y)-1
-            if not self.move_is_ko_legal(x, y):
+            if not self.move_is_ko_legal(x, y) or not self.move_is_suicide_legal(x, y):
                 return False
         else:
             return False
         self.passed = passes
         self.active_player = -self.active_player
         return True
+    
+    def move_is_suicide_legal(self, x_coord, y_coord):
+        return self.board[x_coord, y_coord] != 0
     
     def move_is_ko_legal(self, x_coord, y_coord):
         checked_state = self.previous_state
@@ -240,7 +243,7 @@ class Game:
             self.state.clear_possible_moves()
             self.state = result
             score = self.state.score()
-            print("Score:", self.state.score())
+            print("Score:", score)
             self.state.print_state()
             #draw_board(board)
             if self.concede_threshold is not None and self.turn > 10 and self.concede_threshold <= abs(score):
@@ -259,24 +262,27 @@ class Agent(abc.ABC):
 
 class RandomAgent(Agent):
     def move(self, state):
-        return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
+        return not bool(random.randint(0, 1000)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 class MCTSAgent(Agent):
-    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 1.4):
+    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 0.02):
         from neuralnetwork import NeuralNetwork
         self.name = name
         self.boardsize = boardsize
-        self.nn = NeuralNetwork(name=self.name, boardsize = boardsize, load=False)
+        self.nn = NeuralNetwork(name=self.name, boardsize = boardsize, load=True)
         self.processing_time = processing_time
         self.visited_states = visited_states
         self.exploration = exploration
+        self.reset()
+        
+    def reset(self):
         self.priority_list = []
-        for i in range(boardsize):
-            for j in range(boardsize):
+        for i in range(self.boardsize):
+            for j in range(self.boardsize):
                 self.priority_list.append([False, i, j])
         self.priority_list.append([True, 0, 0])
         self.priority_list = np.array(self.priority_list)
-        self.values = np.zeros((boardsize, boardsize))
+        self.values = np.zeros((self.boardsize, self.boardsize))
         self.pass_value = 0
 
     def save(self):
@@ -291,7 +297,7 @@ class MCTSAgent(Agent):
         while time.time() - start_time < self.processing_time and state.times_visited < self.visited_states:
             #SELECTION
             current_state = state
-            while current_state.candidates_evaluated == self.boardsize*self.boardsize+1:
+            while current_state.candidates_evaluated == self.boardsize*self.boardsize+1 and not current_state.finished:
                 max_value = -1000
                 max_state = None
                 for _,_,_,s in current_state.get_possible_moves():
@@ -301,11 +307,14 @@ class MCTSAgent(Agent):
                 current_state = max_state
             #EXPANSION: use priority list to determine next move to evaluate, 
             #previous high scoring moves are prefered
-            while True:
-                passes, x, y = self.priority_list[current_state.candidates_evaluated]
-                result = current_state.add_result_state(passes, x, y)
-                if result is not None:
-                    break
+            if current_state.finished:
+                result = current_state
+            else:
+                while True:
+                    passes, x, y = self.priority_list[current_state.candidates_evaluated]
+                    result = current_state.add_result_state(passes, x, y)
+                    if result is not None:
+                        break
             #SIMULATION: instead of random playouts
             #a network trained to predict the winning probabilites deteremines the values
             if result.finished:
@@ -325,7 +334,7 @@ class MCTSAgent(Agent):
         max_visited = 0
         max_move = None
         for passes, x, y, s in state.get_possible_moves():
-            print(passes, x, y, s.times_visited)
+            #print(passes, x, y, s.times_visited, s.value, s.finished)
             new_value = s.times_visited + s.value
             if passes:
                 self.pass_value = new_value
@@ -334,6 +343,8 @@ class MCTSAgent(Agent):
             if new_value > max_visited:
                 max_visited = new_value
                 max_move = [passes, x, y]
+                #for next_passes, next_x, next_y, next_s in s.get_possible_moves():
+                    #print("-", next_passes, next_x, next_y, next_s.times_visited, next_s.value, next_s.finished)
         #Update priority_list
         self.priority_list = []
         sorted = np.dstack(np.unravel_index(np.argsort(self.values, axis = None),(self.boardsize, self.boardsize)))[0]
@@ -353,35 +364,39 @@ class MCTSAgent(Agent):
         self.nn.learn()
 
 def learn_to_play():
-    boardsize = 15
-    our_agent = MCTSAgent(name="mcts", boardsize=boardsize)
+    boardsize = 9
+    our_agent = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
     while True:
-        training_game = Game(our_agent, our_agent, boardsize=boardsize)
+        training_game = Game(our_agent, our_agent, boardsize=boardsize, concede_threshold = 25)
         training_game.run_game()
         our_agent.learn_from_game(training_game.state)
         our_agent.save()
+        our_agent.reset()
 
 
 def just_play():
+    boardsize = 9
     player1_wins = 0
     player2_wins = 0
-    for i in range(10):
-        boardsize = 15
+    mcts = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
+    for i in range(100):
+        mcts.reset()
         test = Game(
-            MCTSAgent(name="mcts", boardsize=boardsize, concede_threshold = 25),
+            mcts,
             # NeuralNetworkAgent(name="mcts", board_size=board_size),
             RandomAgent(),
             # RandomAgent(),
-            boardsize=boardsize)
+            boardsize=boardsize,
+            concede_threshold = 25)
         test.run_game()
-        if test.winner() == -1:
+        if test.state.winner() == -1:
             player1_wins += 1
-        if test.winner() == 1:
+        if test.state.winner() == 1:
             player2_wins += 1
     print("Player1 wins:", player1_wins)
     print("Player2 wins:", player2_wins)
 
 
 if __name__ == '__main__':
-    learn_to_play()
-    #just_play()
+    #learn_to_play()
+    just_play()
