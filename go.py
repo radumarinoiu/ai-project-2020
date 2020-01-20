@@ -1,51 +1,20 @@
 import time
+import numpy as np
+import random
+import queue
+import abc
+import matplotlib
+from matplotlib import colors
 
-import numpy as np, random, queue, abc
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 
-import tkinter as tk
 
-board = [[None for j in range(19)] for i in range(19)]  # separate board for gui
+BOARD_SIZE = 9
 
-def draw_white(i, j, event):
-    event.widget.config(bg="white")
-    board[i][j] = "white"
-
-def draw_black(i, j, event):
-    event.widget.config(bg="white")
-    board[i][j] = "white"
-
-def draw_grey(i, j, event):
-    event.widget.config(bg="grey")
-    board[i][j] = "grey"
-
-def draw_board(board): # TODO: Make it run in the same window and clean up code
-    root = tk.Tk()
-    root.title("Go")
-    root.geometry("345x400")
-    root.configure(background='grey')
-    for i, row in enumerate(board):
-        for j, column in enumerate(row):
-            if board[i][j] == "grey":
-                # L = tk.Label(root, text='    ', bg='grey')
-                # L.grid(row=i, column=j)
-                # L.bind('<Button-1>', lambda e, i=i, j=j: draw_grey(i, j, e))
-                pass
-            elif board[i][j] == "black":
-                L = tk.Label(root, text='    ', bg='black')
-                L.grid(row=i, column=j)
-                L.bind('<Button-1>', lambda e, i=i, j=j: draw_black(i, j, e))
-            elif board[i][j] == "white":
-                L = tk.Label(root, text='    ', bg='white')
-                L.grid(row=i, column=j)
-                L.bind('<Button-1>', lambda e, i=i, j=j: draw_white(i, j, e))
-
-    root.update()
-    root.after(20, test.run_game())
-    root.after(10, draw_board(board))
-    root.mainloop()
 
 class State:
-    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state, starting_player=1):
+    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state, fig, image, starting_player=1):
         self.boardsize = boardsize
         self.board = board.copy()
         self.active_player = active_player
@@ -55,11 +24,13 @@ class State:
         self.possible_moves = []
         self.finished = False
         self.starting_player = starting_player
-        
+        self.image = image
+        self.fig = fig
+
     def get_possible_moves(self):
         self.add_possible_moves()
         return self.possible_moves
-        
+
     def add_possible_moves(self):
         if len(self.possible_moves) > 0:
             return
@@ -68,20 +39,20 @@ class State:
             for j in range(self.boardsize):
                 if self.result_state(False, i, j):
                     self.add_result_state(False, i, j)
-                
+
     def add_result_state(self, passes, x, y):
         result = self.result_state(passes, x, y)
         if result is not None:
             self.possible_moves.append([passes, x, y, result])
-    
+
     def result_state(self, passes, x, y):
         if self.board[x,y] != 0 and not passes:
             return None
-        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self, self.starting_player)
+        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self, self.fig, self.image, self.starting_player)
         if new_state.make_move(passes, x, y):
             return new_state
         return None
-        
+
     def make_move(self, passes, x, y):
         if passes:
             if self.passed:
@@ -96,7 +67,7 @@ class State:
         self.passed = passes
         self.active_player = -self.active_player
         return True
-    
+
     def move_is_ko_legal(self, x_coord, y_coord):
         checked_state = self.previous_state
         while checked_state is not None:
@@ -105,14 +76,14 @@ class State:
                     return False
             checked_state = checked_state.previous_state
         return True
-    
+
     def board_is_equal(self, test_board):
         for i in range(self.boardsize):
             for j in range(self.boardsize):
                 if self.board[i,j] != test_board[i,j]:
                     return False
         return True
-    
+
     def remove_all_encircled(self, x_coord, y_coord):
         colour = self.board[x_coord, y_coord]
         checked = np.zeros((self.boardsize, self.boardsize), dtype=bool)
@@ -121,21 +92,21 @@ class State:
             removed += self.remove_encircled(checked, n, -colour)
         removed += self.remove_encircled(checked, (x_coord, y_coord), colour)
         return removed
-    
+
     def remove_encircled(self, checked, start, colour):
         removed = 0
         for (x, y) in self.encircled_by(checked, start, colour, -colour):
             self.board[x, y] = 0
             removed += 1
         return removed
-    
+
     def encircled_by(self, checked, start, colour, encircling_colour):
         found_colour, group = self.encircled(checked, start, colour)
         if found_colour == encircling_colour:
             return group
         else:
             return []
-    
+
     def encircled(self, checked, start, colour):
         q = queue.Queue()
         q.put(start)
@@ -159,8 +130,8 @@ class State:
         if encircled:
             return encircling_colour, current_group
         else:
-            return encircling_colour, []        
-                
+            return encircling_colour, []
+
     def neighbours(self, x_coord, y_coord):
         candidates = [(x_coord+1, y_coord),(x_coord-1, y_coord),(x_coord, y_coord+1),(x_coord, y_coord-1)]
         neighbours = []
@@ -168,7 +139,7 @@ class State:
             if x>=0 and x < self.boardsize and y>=0 and y < self.boardsize:
                 neighbours.append((x, y))
         return neighbours
-    
+
     def score(self):
         checked = np.zeros((self.boardsize, self.boardsize), dtype=bool)
         score = 0
@@ -177,7 +148,7 @@ class State:
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
         return score + 6.5 * self.starting_player
-    
+
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
             print('\N{Black Square Button}', end = '')
@@ -195,20 +166,26 @@ class State:
         for i in range(self.boardsize + 2):
             print('\N{Black Square Button}', end = '')
         print('')
-        print('')
-        
+
+    def draw_board(self):
+        self.image.set_data(self.board)
+        self.fig.canvas.draw()
+        plt.pause(0.01)
+
     def clear_possible_moves(self):
         self.possible_moves = []
-    
+
 
 class Game:
-    def __init__(self, agent_one, agent_two, boardsize=19):
+    def __init__(self, agent_one, agent_two, fig, image, boardsize=19):
         starting_player = 1 if np.random.randint(0, 2) else -1
-        self.state = State(boardsize, np.zeros((boardsize, boardsize)), starting_player, boardsize*boardsize, False, None, starting_player)
+        board = np.zeros((boardsize, boardsize))
+
+        self.state = State(boardsize, board, starting_player, boardsize*boardsize, False, None, fig, image, starting_player)
         self.agent_one = agent_one
         self.agent_two = agent_two
         self.moves_counter = 0
-    
+
     def winner(self):
         score = self.state.score()
         if score == 0:
@@ -234,7 +211,7 @@ class Game:
             self.state.clear_possible_moves()
             self.state = result
             # self.state.print_state()
-            #draw_board(board)
+            self.state.draw_board()
             # print(self.state.score())
         winner = self.winner()
         # if winner == 0:
@@ -296,21 +273,36 @@ class NeuralNetworkAgent(TrainingNeuralNetworkAgent):
         self.epsilon = 0
 
 
+def init_graphics():
+    fig = plt.figure()
+    ax = fig.gca()
+    # ax.set_xticks(np.arange(-.5, 10, 1))
+    # ax.set_yticks(np.arange(-.5, 10, 1))
+    # ax.set_xticklabels(np.arange(1, 12, 1))
+    # ax.set_yticklabels(np.arange(1, 12, 1))
+    plt.grid()
+    fig.show()
+    cmap = colors.ListedColormap(['red', 'white', 'blue'])  # Player2, Neutral, Player1
+    image = ax.imshow(np.random.randint(-1, 2, (BOARD_SIZE, BOARD_SIZE)), cmap=cmap, vmin=-1, vmax=1)
+    return fig, image
+
+
 def learn_to_play():
-    board_size = 9
     player1_wins = 0
     player2_wins = 0
 
-    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
-    # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=board_size)
+    fig, image = init_graphics()
+
+    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
+    # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
     agent2 = RandomAgent()
     for game_counter in range(1000):
         # if agent1.epsilon < 0.05:
         #     break
         test = Game(
-            agent1,
-            agent2,
-            boardsize=board_size)
+            agent1, agent2,
+            fig, image,
+            boardsize=BOARD_SIZE)
         print(test.state.score())
         test.run_game()
         game_counter += 1
@@ -332,9 +324,9 @@ def learn_to_play():
     player2_wins = 0
     for game_counter in range(300):
         test = Game(
-            agent1,
-            agent2,
-            boardsize=board_size)
+            agent1, agent2,
+            fig, image,
+            boardsize=BOARD_SIZE)
         print(test.state.score())
         test.run_game()
         game_counter += 1
@@ -353,26 +345,29 @@ def learn_to_play():
 
 
 def just_play():
-    board_size = 9
     player1_wins = 0
     player2_wins = 0
 
+    fig, image = init_graphics()
+
     # agent1 = RandomAgent()
-    agent1 = NeuralNetworkAgent(name="agent1", board_size=board_size)
+    agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
     agent2 = RandomAgent()
 
-    for i in range(300):
+    for game_counter in range(500):
         test = Game(
-            agent1,
-            agent2,
-            boardsize=board_size)
+            agent1, agent2,
+            fig, image,
+            boardsize=BOARD_SIZE)
         test.run_game()
         if test.winner() == 1:
             player1_wins += 1
         if test.winner() == -1:
             player2_wins += 1
-        print("{} : {}".format(player1_wins, player2_wins))
-        print("Moves: {}".format(test.moves_count()))
+        print("Game #{} - Moves: {} - Score: {}:{}".format(
+            game_counter+1,
+            test.moves_count(),
+            player1_wins, player2_wins))
 
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
