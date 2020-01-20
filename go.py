@@ -254,32 +254,14 @@ class RandomAgent(Agent):
         return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 
-class NeuralNetworkAgent(Agent):
-    def __init__(self, name, board_size=9):
-        from neuralnetwork import NeuralNetwork
-        self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, inputs=(board_size, board_size, 1))
-
-    def move(self, state):
-        possible_moves = state.get_possible_moves()
-        max_score = 0
-        best_move = possible_moves[0]
-        input_board_size = best_move[3].board.shape[0]
-        for move in possible_moves:
-            score = self.nn.predict(move[3].board.reshape((1, input_board_size, input_board_size, 1)))[0]
-            if score > max_score:
-                max_score = score
-                best_move = move
-        return best_move[0], best_move[1], best_move[2]
-
-
 class TrainingNeuralNetworkAgent(Agent):
     def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.1, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.2, inputs=(board_size, board_size, 1))
         self.epsilon = 1
-        self.d_epsilon = 0.9999
+        self.d_epsilon = 0.999
+        self.learn = True
 
     def save(self):
         self.nn.save(self.name)
@@ -302,8 +284,16 @@ class TrainingNeuralNetworkAgent(Agent):
                 if score > max_score:
                     max_score = score
                     best_move = move
-        self.nn.memorize(best_move[3].board.reshape((input_board_size, input_board_size, 1)), best_move[3].score() * state.active_player)
+        if self.learn:
+            self.nn.memorize(best_move[3].board.reshape((input_board_size, input_board_size, 1)), best_move[3].score() * state.active_player)
         return best_move[0], best_move[1], best_move[2]
+
+
+class NeuralNetworkAgent(TrainingNeuralNetworkAgent):
+    def __init__(self, name, board_size=9):
+        super(NeuralNetworkAgent, self).__init__(name, board_size)
+        self.learn = False
+        self.epsilon = 0
 
 
 def learn_to_play():
@@ -314,8 +304,33 @@ def learn_to_play():
     agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
     # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=board_size)
     agent2 = RandomAgent()
-    game_counter = 0
-    while True:
+    for game_counter in range(1000):
+        # if agent1.epsilon < 0.05:
+        #     break
+        test = Game(
+            agent1,
+            agent2,
+            boardsize=board_size)
+        print(test.state.score())
+        test.run_game()
+        game_counter += 1
+        if game_counter % 100 == 0:
+            test.agent_one.save()
+        # test.agent_two.save()
+        if test.winner() == 1:
+            player1_wins += 1
+        if test.winner() == -1:
+            player2_wins += 1
+        print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
+            game_counter,
+            test.agent_one.epsilon,
+            test.moves_count(),
+            player1_wins, player2_wins))
+    agent1.epsilon = 0
+    # agent1.learn = False
+    player1_wins = 0
+    player2_wins = 0
+    for game_counter in range(300):
         test = Game(
             agent1,
             agent2,
@@ -343,7 +358,7 @@ def just_play():
     player2_wins = 0
 
     # agent1 = RandomAgent()
-    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=board_size)
+    agent1 = NeuralNetworkAgent(name="agent1", board_size=board_size)
     agent2 = RandomAgent()
 
     for i in range(300):
@@ -362,5 +377,5 @@ def just_play():
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    learn_to_play()
-    # just_play()
+    # learn_to_play()
+    just_play()

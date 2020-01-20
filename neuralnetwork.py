@@ -30,13 +30,12 @@ class NeuralNetwork(object):
             self.model = loaded_model
         else:
             self.model = Sequential()
-            self.model.add(Conv2D(64, (3, 3), input_shape=inputs))
-            self.model.add(Conv2D(32, (2, 2)))
+            self.model.add(Conv2D(32, (3, 3), input_shape=inputs))
             self.model.add(Conv2D(16, (2, 2)))
             self.model.add(Flatten())
             # self.model.add(Dense(80, activation="relu", input_shape=(inputs,)))
-            self.model.add(Dense(512, activation="relu"))
             self.model.add(Dense(128, activation="relu"))
+            self.model.add(Dense(32, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
         self.model.compile(loss='mse', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
