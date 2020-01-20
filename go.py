@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 
 BOARD_SIZE = 9
+RENDER_GAME = False
 
 
 class State:
@@ -211,7 +212,8 @@ class Game:
             self.state.clear_possible_moves()
             self.state = result
             # self.state.print_state()
-            self.state.draw_board()
+            if RENDER_GAME:
+                self.state.draw_board()
             # print(self.state.score())
         winner = self.winner()
         # if winner == 0:
@@ -237,7 +239,7 @@ class TrainingNeuralNetworkAgent(Agent):
         self.name = name
         self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.2, inputs=(board_size, board_size, 1))
         self.epsilon = 1
-        self.d_epsilon = 0.999
+        self.d_epsilon = 0.9999
         self.learn = True
 
     def save(self):
@@ -293,9 +295,13 @@ def learn_to_play():
 
     fig, image = init_graphics()
 
-    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
-    agent2 = RandomAgent()
+    # agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
+    agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
+    agent1.epsilon = 1
+    agent1.d_epsilon = 0.99999
+    agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
+    agent2.epsilon = 0.05
+    # agent2 = RandomAgent()
     for game_counter in range(1000):
         # if agent1.epsilon < 0.05:
         #     break
@@ -303,43 +309,18 @@ def learn_to_play():
             agent1, agent2,
             fig, image,
             boardsize=BOARD_SIZE)
-        print(test.state.score())
         test.run_game()
         game_counter += 1
         if game_counter % 100 == 0:
-            test.agent_one.save()
-        # test.agent_two.save()
+            # test.agent_one.save()
+            test.agent_two.save()
         if test.winner() == 1:
             player1_wins += 1
         if test.winner() == -1:
             player2_wins += 1
         print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
             game_counter,
-            test.agent_one.epsilon,
-            test.moves_count(),
-            player1_wins, player2_wins))
-    agent1.epsilon = 0
-    # agent1.learn = False
-    player1_wins = 0
-    player2_wins = 0
-    for game_counter in range(300):
-        test = Game(
-            agent1, agent2,
-            fig, image,
-            boardsize=BOARD_SIZE)
-        print(test.state.score())
-        test.run_game()
-        game_counter += 1
-        if game_counter % 100 == 0:
-            test.agent_one.save()
-        # test.agent_two.save()
-        if test.winner() == 1:
-            player1_wins += 1
-        if test.winner() == -1:
-            player2_wins += 1
-        print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
-            game_counter,
-            test.agent_one.epsilon,
+            test.agent_two.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))
 
@@ -347,12 +328,15 @@ def learn_to_play():
 def just_play():
     player1_wins = 0
     player2_wins = 0
+    global RENDER_GAME
+    RENDER_GAME = True
 
     fig, image = init_graphics()
 
     # agent1 = RandomAgent()
     agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    agent2 = RandomAgent()
+    # agent2 = RandomAgent()
+    agent2 = NeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
 
     for game_counter in range(500):
         test = Game(
