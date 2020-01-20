@@ -13,7 +13,7 @@ if gpus:
 
 from keras.optimizers import Adam, Adagrad
 from keras.models import Sequential, model_from_json
-from keras.layers import Dense, Conv2D, Flatten
+from keras.layers import Dense, Conv2D, Flatten, Dropout
 
 
 class NeuralNetwork(object):
@@ -34,6 +34,7 @@ class NeuralNetwork(object):
             self.model.add(Conv2D(32, (2, 2)))
             self.model.add(Conv2D(16, (2, 2)))
             self.model.add(Flatten())
+            self.model.add(Dropout(0.5))
             # self.model.add(Dense(80, activation="relu", input_shape=(inputs,)))
             self.model.add(Dense(512, activation="relu"))
             self.model.add(Dense(128, activation="relu"))
