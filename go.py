@@ -295,12 +295,15 @@ def learn_to_play():
 
     fig, image = init_graphics()
 
-    # agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    agent1.epsilon = 1
-    agent1.d_epsilon = 0.99999
+    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
+    agent1.epsilon = 0
+    # agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
+    # agent1.epsilon = 1
+    # agent1.d_epsilon = 0.99999
+    # agent1 = RandomAgent()
+
     agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
-    agent2.epsilon = 0.05
+    agent2.epsilon = 0
     # agent2 = RandomAgent()
     for game_counter in range(1000):
         # if agent1.epsilon < 0.05:
@@ -312,7 +315,7 @@ def learn_to_play():
         test.run_game()
         game_counter += 1
         if game_counter % 100 == 0:
-            # test.agent_one.save()
+            test.agent_one.save()
             test.agent_two.save()
         if test.winner() == 1:
             player1_wins += 1
