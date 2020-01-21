@@ -237,7 +237,7 @@ class TrainingNeuralNetworkAgent(Agent):
     def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.2, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.05, inputs=(board_size, board_size, 1))
         self.epsilon = 1
         self.d_epsilon = 0.9999
         self.learn = True
@@ -314,13 +314,15 @@ def learn_to_play():
             boardsize=BOARD_SIZE)
         test.run_game()
         game_counter += 1
-        if game_counter % 100 == 0:
+        if game_counter % 10 == 0:
             test.agent_one.save()
             test.agent_two.save()
         if test.winner() == 1:
             player1_wins += 1
         if test.winner() == -1:
             player2_wins += 1
+        if test.moves_count() < 50:
+            time.sleep(1)
         print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
             game_counter,
             test.agent_two.epsilon,
@@ -359,5 +361,5 @@ def just_play():
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    # learn_to_play()
-    just_play()
+    learn_to_play()
+    # just_play()
