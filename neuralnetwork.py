@@ -1,4 +1,6 @@
 import os
+import random
+
 import numpy as np
 
 import tensorflow as tf
@@ -11,6 +13,7 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
+from collections import deque
 from keras.optimizers import Adam, Adagrad
 from keras.models import Sequential, model_from_json
 from keras.layers import Dense, Conv2D, Flatten
@@ -39,25 +42,25 @@ class NeuralNetwork(object):
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
         self.model.compile(loss='mse', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
-        self.memory = [[], []]
+        self.memory = deque(maxlen=50000)
 
     def predict(self, inp):
         return self.model.predict(inp)
 
     def memorize(self, inp, out):
-        self.memory[0].append(inp)
-        self.memory[1].append(out)
-        if len(self.memory[0]) >= 1:
-            self.learn()
+        self.memory.append([inp, out])
 
     def learn(self):
         # print("Learning...")
+        batch_size = 50
+        temp_mem = random.sample(self.memory, batch_size)
+        inputs = [elem[0] for elem in temp_mem]
+        labels = [elem[1] for elem in temp_mem]
         self.model.fit(
-            np.array(self.memory[0]),
-            np.array(self.memory[1]),
-            epochs=1, verbose=0, batch_size=1
+            np.array(inputs),
+            np.array(labels),
+            epochs=1, verbose=0, batch_size=batch_size
         )
-        self.memory = [[], []]
         # print("Learned")
 
     def save(self, name):

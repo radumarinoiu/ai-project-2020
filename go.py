@@ -171,7 +171,7 @@ class State:
     def draw_board(self):
         self.image.set_data(self.board)
         self.fig.canvas.draw()
-        plt.pause(0.01)
+        plt.pause(0.001)
 
     def clear_possible_moves(self):
         self.possible_moves = []
@@ -328,6 +328,8 @@ def learn_to_play():
             test.agent_two.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))
+        agent1.nn.learn()
+        agent2.nn.learn()
 
 
 def just_play():
