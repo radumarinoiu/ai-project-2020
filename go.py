@@ -217,7 +217,9 @@ class State:
         self.possible_moves = []
         
     def randomize(self, stone_probability):
-        for i,j in random.shuffle([(x,y) for x in range(self.boardsize) for y in range(self.boardsize)]):
+        spots = [(x,y) for x in range(self.boardsize) for y in range(self.boardsize)]
+        random.shuffle(spots)
+        for i, j in spots:
             if  random.random() < stone_probability:
                 self.make_move(False, i, j)
         
@@ -271,7 +273,7 @@ class RandomAgent(Agent):
         return not bool(random.randint(0, 1000)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 class MCTSAgent(Agent):
-    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 0.02):
+    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 0.1):
         from neuralnetwork import NeuralNetwork
         self.name = name
         self.boardsize = boardsize
@@ -294,8 +296,8 @@ class MCTSAgent(Agent):
     def save(self):
         self.nn.save(self.name)
         
-    def priority_value(self, state):
-        return state.value + self.exploration * math.sqrt(math.log(state.previous_state.times_visited)/state.times_visited)
+    def priority_value(self, state, total_visits):
+        return state.value + self.exploration * math.sqrt(2 * math.log(total_visits)/state.times_visited)
         
     def move(self, state):
         start_time = time.time()
@@ -307,8 +309,9 @@ class MCTSAgent(Agent):
                 max_value = -1000
                 max_state = None
                 for _,_,_,s in current_state.get_possible_moves():
-                    if self.priority_value(s) > max_value:
-                        max_value = self.priority_value(s)
+                    priority = self.priority_value(s, state.times_visited)
+                    if priority > max_value:
+                        max_value = priority
                         max_state = s
                 current_state = max_state
             #EXPANSION: use priority list to determine next move to evaluate, 
@@ -340,7 +343,7 @@ class MCTSAgent(Agent):
         max_visited = 0
         max_move = None
         for passes, x, y, s in state.get_possible_moves():
-            #print(passes, x, y, s.times_visited, s.value, s.finished)
+            print(passes, x, y, s.times_visited, s.value, s.finished)
             new_value = s.times_visited + s.value
             if passes:
                 self.pass_value = new_value
@@ -405,5 +408,5 @@ def just_play():
 
 
 if __name__ == '__main__':
-    #learn_to_play()
-    just_play()
+    learn_to_play()
+    #just_play()
