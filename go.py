@@ -215,6 +215,12 @@ class State:
         
     def clear_possible_moves(self):
         self.possible_moves = []
+        
+    def randomize(self, stone_probability):
+        for i,j in random.shuffle([(x,y) for x in range(self.boardsize) for y in range(self.boardsize)]):
+            if  random.random() < stone_probability:
+                self.make_move(False, i, j)
+        
     
 
 class Game:
@@ -347,7 +353,7 @@ class MCTSAgent(Agent):
                     #print("-", next_passes, next_x, next_y, next_s.times_visited, next_s.value, next_s.finished)
         #Update priority_list
         self.priority_list = []
-        sorted = np.dstack(np.unravel_index(np.argsort(self.values, axis = None),(self.boardsize, self.boardsize)))[0]
+        sorted = np.dstack(np.unravel_index(np.argsort(-self.values, axis = None),(self.boardsize, self.boardsize)))[0]
         for i, j in sorted:
             self.priority_list.append([False, i, j])
         self.priority_list.append([True, 0, 0])
@@ -368,6 +374,7 @@ def learn_to_play():
     our_agent = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
     while True:
         training_game = Game(our_agent, our_agent, boardsize=boardsize, concede_threshold = 25)
+        training_game.state.randomize(random.uniform(0.1, 0.5))
         training_game.run_game()
         our_agent.learn_from_game(training_game.state)
         our_agent.save()
