@@ -37,21 +37,26 @@ class State:
         return self.possible_moves
 
     def add_possible_moves(self):
-        if len(self.possible_moves) > 0:
-            return
-        self.add_result_state(True, 0, 0)
+        if self.move_candidates[1]:
+            self.add_result_state(True, 0, 0)
         for i in range(self.boardsize):
             for j in range(self.boardsize):
-                if self.result_state(False, i, j):
+                if self.move_candidates[0][i, j]:
                     self.add_result_state(False, i, j)
 
     def add_result_state(self, passes, x, y):
+        self.candidates_evaluated += 1
+        if passes:
+            self.move_candidates[1] = False
+        else:
+            self.move_candidates[0][x, y] = False
         result = self.result_state(passes, x, y)
         if result is not None:
             self.possible_moves.append([passes, x, y, result])
-
+        return result
+    
     def result_state(self, passes, x, y):
-        if self.board[x,y] != 0 and not passes:
+        if (self.board[x,y] != 0 and not passes) or self.finished:
             return None
         new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self, self.fig, self.image, self.starting_player)
         if new_state.make_move(passes, x, y):
@@ -65,14 +70,17 @@ class State:
         elif self.board[x,y] == 0:
             self.board[x, y] = self.active_player
             self.empty_fields += self.remove_all_encircled(x, y)-1
-            if not self.move_is_ko_legal(x, y):
+            if not self.move_is_ko_legal(x, y) or not self.move_is_suicide_legal(x, y):
                 return False
         else:
             return False
         self.passed = passes
         self.active_player = -self.active_player
         return True
-
+    
+    def move_is_suicide_legal(self, x_coord, y_coord):
+        return self.board[x_coord, y_coord] != 0
+    
     def move_is_ko_legal(self, x_coord, y_coord):
         checked_state = self.previous_state
         while checked_state is not None:
@@ -169,7 +177,7 @@ class State:
                 if field == 0:
                     print('\N{IDEOGRAPHIC SPACE}', end = '')
                 elif field == 1:
-                    print('\N{MULTIPLICATION SIGN IN DOUBLE CIRCLE}', end = '')
+                    print('\N{Medium Black Circle}', end = '')
                 elif field == -1:
                     print('\N{Medium White Circle}', end = '')
             print('\N{Black Square Button}')
@@ -213,6 +221,9 @@ class Game:
     def run_game(self):
         while not self.state.finished:
             result = None
+            passes = True
+            x = 0
+            y = 0
             while result is None:
                 if self.state.active_player == 1:
                     passes, x, y = self.agent_one.move(self.state)
@@ -255,7 +266,7 @@ class Agent(abc.ABC):
 # game with RandomAgents will  end because they will never pass a turn
 class RandomAgent(Agent):
     def move(self, state):
-        return not bool(random.randint(0, 50)), random.randrange(state.boardsize), random.randrange(state.boardsize)
+        return not bool(random.randint(0, 1000)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 
 class TrainingNeuralNetworkAgent(Agent):
@@ -272,7 +283,10 @@ class TrainingNeuralNetworkAgent(Agent):
 
     def save(self):
         self.nn.save(self.name)
-
+        
+    def priority_value(self, state):
+        return state.value + self.exploration * math.sqrt(math.log(state.previous_state.times_visited)/state.times_visited)
+        
     def move(self, state):
         possible_moves = state.get_possible_moves()
         try:
@@ -373,6 +387,7 @@ def learn_to_play():
 
 
 def just_play():
+    boardsize = 9
     player1_wins = 0
     player2_wins = 0
     global RENDER_GAME
@@ -401,7 +416,6 @@ def just_play():
             player1_wins, player2_wins))
 
 
-# TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
     learn_to_play()
     just_play()
