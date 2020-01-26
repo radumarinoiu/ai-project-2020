@@ -273,7 +273,7 @@ class RandomAgent(Agent):
         return not bool(random.randint(0, 1000)), random.randrange(state.boardsize), random.randrange(state.boardsize)
 
 class MCTSAgent(Agent):
-    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 0.1):
+    def __init__(self, name, boardsize=19, processing_time = 100.0, visited_states = 1000, exploration = 0.05):
         from neuralnetwork import NeuralNetwork
         self.name = name
         self.boardsize = boardsize
@@ -319,14 +319,16 @@ class MCTSAgent(Agent):
             if current_state.finished:
                 result = current_state
             else:
-                while True:
+                while current_state.candidates_evaluated < self.boardsize*self.boardsize+1:
                     passes, x, y = self.priority_list[current_state.candidates_evaluated]
                     result = current_state.add_result_state(passes, x, y)
                     if result is not None:
                         break
             #SIMULATION: instead of random playouts
             #a network trained to predict the winning probabilites deteremines the values
-            if result.finished:
+            if result is None:
+                continue
+            elif result.finished:
                 result.value = (1 + result.winner())/2
             else:
                 result.value = self.nn.predict(result)[0]
@@ -336,14 +338,16 @@ class MCTSAgent(Agent):
             current_state = result
             value = result.value
             while current_state != state.previous_state:
-                current_state.value = (current_state.value * current_state.times_visited + value) / (current_state.times_visited + 1)
+                if not value == 1 or current_state.times_visited == 0:
+                    current_state.value = (current_state.value * current_state.times_visited + value) / (current_state.times_visited + 1)
                 current_state.times_visited += 1
                 current_state = current_state.previous_state
                 value = 1 - value
         max_visited = 0
         max_move = None
+        chosen_state = None
         for passes, x, y, s in state.get_possible_moves():
-            print(passes, x, y, s.times_visited, s.value, s.finished)
+#            print(passes, x, y, s.times_visited, s.value, s.finished)
             new_value = s.times_visited + s.value
             if passes:
                 self.pass_value = new_value
@@ -352,8 +356,9 @@ class MCTSAgent(Agent):
             if new_value > max_visited:
                 max_visited = new_value
                 max_move = [passes, x, y]
-                #for next_passes, next_x, next_y, next_s in s.get_possible_moves():
-                    #print("-", next_passes, next_x, next_y, next_s.times_visited, next_s.value, next_s.finished)
+                chosen_state = s
+#                for next_passes, next_x, next_y, next_s in s.get_possible_moves():
+#                    print("-", next_passes, next_x, next_y, next_s.times_visited, next_s.value, next_s.finished)
         #Update priority_list
         self.priority_list = []
         sorted = np.dstack(np.unravel_index(np.argsort(-self.values, axis = None),(self.boardsize, self.boardsize)))[0]
@@ -361,7 +366,7 @@ class MCTSAgent(Agent):
             self.priority_list.append([False, i, j])
         self.priority_list.append([True, 0, 0])
         print("Number of states visited:", state.times_visited)
-        print("Likelihood of black winning:", self.nn.predict(state)[0][0])
+        print("Likelihood of black winning:", self.nn.predict(chosen_state)[0][0])
         return max_move
     
     def learn_from_game(self, end_state):
@@ -376,8 +381,8 @@ def learn_to_play():
     boardsize = 9
     our_agent = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
     while True:
-        training_game = Game(our_agent, our_agent, boardsize=boardsize, concede_threshold = 25)
-        training_game.state.randomize(random.uniform(0.1, 0.5))
+        training_game = Game(our_agent, our_agent, boardsize=boardsize, concede_threshold = 20)
+        training_game.state.randomize(random.uniform(0.1, 0.9))
         training_game.run_game()
         our_agent.learn_from_game(training_game.state)
         our_agent.save()
