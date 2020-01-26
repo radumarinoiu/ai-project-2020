@@ -28,6 +28,10 @@ class State:
         self.image = image
         self.fig = fig
 
+    @property
+    def board_repr(self):
+        return self.board.reshape((self.boardsize, self.boardsize, 1))
+
     def get_possible_moves(self):
         self.add_possible_moves()
         return self.possible_moves
@@ -141,14 +145,19 @@ class State:
                 neighbours.append((x, y))
         return neighbours
 
-    def score(self):
+    def score(self, player_nr):
         checked = np.zeros((self.boardsize, self.boardsize), dtype=bool)
         score = 0
         for x in range(self.boardsize):
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score + 6.5 * self.starting_player
+        score = score + 6.5 * self.starting_player
+        winner = score/abs(score)
+        score += 3 * int(self.finished) * winner
+        score *= player_nr
+        # print(score)
+        return score
 
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -188,7 +197,9 @@ class Game:
         self.moves_counter = 0
 
     def winner(self):
-        score = self.state.score()
+        score = self.state.score(self.agent_one.player_nr)
+        # print("Agent one:", self.state.score(self.agent_one.player_nr))
+        # print("Agent two:", self.state.score(self.agent_two.player_nr))
         if score == 0:
             return 0
         elif score > 0:
@@ -223,7 +234,21 @@ class Game:
 
 
 class Agent(abc.ABC):
+    def __init__(self, name="", player_nr=1):
+        self.name = name
+        self.player_nr = player_nr
+        self.epsilon = 0
+
+    def reduce_epsilon(self, d_epsilon):
+        self.epsilon = max(0, self.epsilon - d_epsilon)
+
     def move(self, state):
+        pass
+
+    def learn(self):
+        pass
+
+    def save(self):
         pass
 
 
@@ -234,13 +259,16 @@ class RandomAgent(Agent):
 
 
 class TrainingNeuralNetworkAgent(Agent):
-    def __init__(self, name, board_size=9):
+    def __init__(self, name, player_nr, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.05, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=(board_size, board_size, 1))
         self.epsilon = 1
-        self.d_epsilon = 0.9999
-        self.learn = True
+        self.do_learn = True
+        self.player_nr = player_nr
+
+    def learn(self):
+        self.nn.learn()
 
     def save(self):
         self.nn.save(self.name)
@@ -253,25 +281,31 @@ class TrainingNeuralNetworkAgent(Agent):
             print(len(list(possible_moves)))
             print(possible_moves)
             raise
-        max_score = 0
-        self.epsilon *= self.d_epsilon
+        max_score = best_move[3].score(self.player_nr)
         input_board_size = best_move[3].board.shape[0]
+
         if np.random.rand() >= self.epsilon:
-            for move in possible_moves:
-                score = self.nn.predict(move[3].board.reshape((1, input_board_size, input_board_size, 1)))[0]
-                # self.nn.memorize(move[3], move[3].score())
+            next_possible_states = np.array([
+                move[3].board.reshape((input_board_size, input_board_size, 1)) for move in possible_moves])
+            next_scores = self.nn.predict(next_possible_states)
+            for index, score in enumerate(next_scores):
                 if score > max_score:
+                    best_move = possible_moves[index]
                     max_score = score
-                    best_move = move
-        if self.learn:
-            self.nn.memorize(best_move[3].board.reshape((input_board_size, input_board_size, 1)), best_move[3].score() * state.active_player)
+        best_state: State = best_move[3]
+        if self.do_learn:
+            self.nn.memorize(
+                state.board_repr, best_state.board_repr,
+                best_state.score(self.player_nr) - state.score(self.player_nr),
+                best_state.finished
+            )
         return best_move[0], best_move[1], best_move[2]
 
 
 class NeuralNetworkAgent(TrainingNeuralNetworkAgent):
-    def __init__(self, name, board_size=9):
-        super(NeuralNetworkAgent, self).__init__(name, board_size)
-        self.learn = False
+    def __init__(self, name, player_nr, board_size=9):
+        super(NeuralNetworkAgent, self).__init__(name, player_nr, board_size)
+        self.do_learn = False
         self.epsilon = 0
 
 
@@ -293,28 +327,36 @@ def learn_to_play():
     player1_wins = 0
     player2_wins = 0
 
+    end_episode = 500
+    epsilon_end_episode = 100
+    d_epsilon = 1/epsilon_end_episode
+
+    global RENDER_GAME
+    RENDER_GAME = False
+
     fig, image = init_graphics()
 
-    agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    agent1.epsilon = 0
-    # agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    # agent1.epsilon = 1
-    # agent1.d_epsilon = 0.99999
-    # agent1 = RandomAgent()
+    agent1 = TrainingNeuralNetworkAgent(name="agent1", player_nr=1, board_size=BOARD_SIZE)
 
-    agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
-    agent2.epsilon = 0
-    # agent2 = RandomAgent()
-    for game_counter in range(1000):
-        # if agent1.epsilon < 0.05:
-        #     break
+    # agent2 = RandomAgent("random2", player_nr=-1)
+    agent2 = TrainingNeuralNetworkAgent(name="agent2", player_nr=-1, board_size=BOARD_SIZE)
+
+    for episode in range(end_episode):
+        if episode % 25 == 0:
+            RENDER_GAME = True
         test = Game(
             agent1, agent2,
             fig, image,
             boardsize=BOARD_SIZE)
         test.run_game()
-        game_counter += 1
-        if game_counter % 10 == 0:
+        if episode % 25 == 0:
+            RENDER_GAME = False
+        episode += 1
+        agent1.learn()
+        agent1.reduce_epsilon(d_epsilon)
+        agent2.learn()
+        agent2.reduce_epsilon(d_epsilon)
+        if episode % 10 == 0:
             test.agent_one.save()
             test.agent_two.save()
         if test.winner() == 1:
@@ -324,12 +366,10 @@ def learn_to_play():
         if test.moves_count() < 50:
             time.sleep(1)
         print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
-            game_counter,
-            test.agent_two.epsilon,
+            episode,
+            test.agent_one.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))
-        agent1.nn.learn()
-        agent2.nn.learn()
 
 
 def just_play():
@@ -341,9 +381,9 @@ def just_play():
     fig, image = init_graphics()
 
     # agent1 = RandomAgent()
-    agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    # agent2 = RandomAgent()
-    agent2 = NeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
+    agent1 = NeuralNetworkAgent(name="agent1", player_nr=1, board_size=BOARD_SIZE)
+    # agent2 = RandomAgent("random2", player_nr=-1)
+    agent2 = NeuralNetworkAgent(name="agent2", player_nr=-1, board_size=BOARD_SIZE)
 
     for game_counter in range(500):
         test = Game(
@@ -364,4 +404,4 @@ def just_play():
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
     learn_to_play()
-    # just_play()
+    just_play()

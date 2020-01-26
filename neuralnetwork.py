@@ -34,34 +34,48 @@ class NeuralNetwork(object):
         else:
             self.model = Sequential()
             self.model.add(Conv2D(32, (3, 3), input_shape=inputs))
-            self.model.add(Conv2D(16, (2, 2)))
+            self.model.add(Conv2D(24, (2, 2)))
             self.model.add(Flatten())
-            # self.model.add(Dense(80, activation="relu", input_shape=(inputs,)))
-            self.model.add(Dense(128, activation="relu"))
+            self.model.add(Dense(32, activation="relu"))
             self.model.add(Dense(32, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
-        self.model.compile(loss='mse', optimizer=Adagrad(lr=learning_rate), metrics=["accuracy"])
-        self.memory = deque(maxlen=50000)
+        self.model.compile(loss='mse', optimizer=Adam(lr=learning_rate), metrics=["accuracy"])
+        self.memory = deque(maxlen=20000)
+        self.batch_size = 512
 
     def predict(self, inp):
         return self.model.predict(inp)
 
-    def memorize(self, inp, out):
-        self.memory.append([inp, out])
+    def memorize(self, inp, out, reward, done):
+        self.memory.append([inp, out, reward, done])
 
     def learn(self):
-        # print("Learning...")
-        batch_size = 50
-        temp_mem = random.sample(self.memory, batch_size)
-        inputs = [elem[0] for elem in temp_mem]
-        labels = [elem[1] for elem in temp_mem]
-        self.model.fit(
-            np.array(inputs),
-            np.array(labels),
-            epochs=1, verbose=0, batch_size=batch_size
-        )
-        # print("Learned")
+        if len(self.memory) > self.batch_size * 2:
+            print("Learning")
+            temp_mem = random.sample(self.memory, self.batch_size)
+
+            next_states = np.array([elem[1] for elem in temp_mem])
+            next_qs = [elem[0] for elem in self.model.predict(next_states)]
+
+            inputs = []
+            labels = []
+
+            for mem_index, (state, _, reward, done) in enumerate(temp_mem):
+                if not done:
+                    # Partial Q formula
+                    new_q = reward + 0.95 * next_qs[mem_index]
+                else:
+                    new_q = reward
+
+                inputs.append(state)
+                labels.append(new_q)
+
+            self.model.fit(
+                np.array(inputs),
+                np.array(labels),
+                epochs=1, verbose=0, batch_size=self.batch_size
+            )
 
     def save(self, name):
         # print("Saving model...")
