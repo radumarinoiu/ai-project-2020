@@ -1,47 +1,17 @@
 import numpy as np, tkinter as tk, random, queue, abc, time, math
 
-board = [[None for j in range(19)] for i in range(19)]  # separate board for gui
+import matplotlib
+from matplotlib import colors
 
-def draw_white(i, j, event):
-    event.widget.config(bg="white")
-    board[i][j] = "white"
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 
-def draw_black(i, j, event):
-    event.widget.config(bg="white")
-    board[i][j] = "white"
 
-def draw_grey(i, j, event):
-    event.widget.config(bg="grey")
-    board[i][j] = "grey"
-
-def draw_board(board):
-    root = tk.Tk()
-    root.title("Go")
-    root.geometry("345x400")
-    root.configure(background='grey')
-    for i, row in enumerate(board):
-        for j, column in enumerate(row):
-            if board[i][j] == "grey":
-                # L = tk.Label(root, text='    ', bg='grey')
-                # L.grid(row=i, column=j)
-                # L.bind('<Button-1>', lambda e, i=i, j=j: draw_grey(i, j, e))
-                pass
-            elif board[i][j] == "black":
-                L = tk.Label(root, text='    ', bg='black')
-                L.grid(row=i, column=j)
-                L.bind('<Button-1>', lambda e, i=i, j=j: draw_black(i, j, e))
-            elif board[i][j] == "white":
-                L = tk.Label(root, text='    ', bg='white')
-                L.grid(row=i, column=j)
-                L.bind('<Button-1>', lambda e, i=i, j=j: draw_white(i, j, e))
-
-    root.update()
-    #root.after(20, test.run_game())
-    root.after(10, draw_board(board))
-    root.mainloop()
+BOARD_SIZE = 9
+RENDER_GAME = True
 
 class State:
-    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state):
+    def __init__(self, boardsize, board, active_player, empty_fields, passed, previous_state, fig, image):
         self.boardsize = boardsize
         self.board = board.copy()
         self.active_player = active_player
@@ -54,6 +24,17 @@ class State:
         self.value = None
         self.move_candidates = [np.full((boardsize, boardsize), True), True]
         self.candidates_evaluated = 0
+        self.image = image
+        self.fig = fig
+        
+    @property
+    def board_repr(self):
+        return self.board.reshape((self.boardsize, self.boardsize, 1))
+    
+    def draw_board(self):
+        self.image.set_data(self.board)
+        self.fig.canvas.draw()
+        plt.pause(0.001)
         
     def winner(self):
         score = self.score()
@@ -90,7 +71,7 @@ class State:
     def result_state(self, passes, x, y):
         if (self.board[x,y] != 0 and not passes) or self.finished:
             return None
-        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self)
+        new_state = State(self.boardsize, self.board, self.active_player, self.empty_fields, self.passed, self, self.fig, self.image)
         if new_state.make_move(passes, x, y):
             return new_state
         return None
@@ -226,15 +207,17 @@ class State:
     
 
 class Game:
-    def __init__(self, agent_one, agent_two, boardsize=19, concede_threshold = None):
-        self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize, False, None)
+    def __init__(self, agent_one, agent_two, fig, image, boardsize=19, concede_threshold = None, record = None):
+        self.state = State(boardsize, np.zeros((boardsize, boardsize)), 1, boardsize*boardsize,  False, None, fig, image)
         self.agent_one = agent_one
         self.agent_two = agent_two
         self.concede_threshold = concede_threshold
         self.turn = 0
+        self.record = record
 
         
     def run_game(self):
+        moves = ""
         while not self.state.finished:
             result = None
             passes = True
@@ -246,6 +229,8 @@ class Game:
                 else:
                     passes, x, y = self.agent_two.move(self.state)
                 result = self.state.result_state(passes, x, y)
+            if self.record is not None:
+                moves += str(passes) + " " + str(x) + " " + " " + str(y) + "\n"
             self.turn += 1
             print("Player", (-self.state.active_player + 3)/2, "makes move:", passes, x, y)
             self.state.clear_possible_moves()
@@ -253,7 +238,8 @@ class Game:
             score = self.state.score()
             print("Score:", score)
             self.state.print_state()
-            #draw_board(board)
+            if RENDER_GAME:
+                self.state.draw_board()
             if self.concede_threshold is not None and self.turn > 10 and self.concede_threshold <= abs(score):
                 break
         winner = self.state.winner()
@@ -261,6 +247,10 @@ class Game:
             print("Draw?")
         else:
             print("Player {} won".format(winner))
+        if self.record is not None:
+            file = open(self.record,"w")
+            file.write(moves)
+            file.close()
 
 
 class Agent(abc.ABC):
@@ -376,33 +366,67 @@ class MCTSAgent(Agent):
             self.nn.memorize(checked_state, value)
             checked_state = checked_state.previous_state
         self.nn.learn()
+        
+class ReplayAgent(Agent):
+    def __init__(self, record, time):
+        file = open(record, "r")
+        self.replay = file.readlines()
+        file.close()
+        self.time = time
+    
+    def move(self, state):
+        time.sleep(self.time)
+        passes, x, y = self.replay.pop(0).split()
+        return passes == "True", int(x), int(y)
+        
+def init_graphics():
+    fig = plt.figure()
+    ax = fig.gca()
+    # ax.set_xticks(np.arange(-.5, 10, 1))
+    # ax.set_yticks(np.arange(-.5, 10, 1))
+    # ax.set_xticklabels(np.arange(1, 12, 1))
+    # ax.set_yticklabels(np.arange(1, 12, 1))
+    plt.grid()
+    fig.show()
+    cmap = colors.ListedColormap(['red', 'white', 'blue'])  # Player2, Neutral, Player1
+    image = ax.imshow(np.random.randint(-1, 2, (BOARD_SIZE, BOARD_SIZE)), cmap=cmap, vmin=-1, vmax=1)
+    return fig, image
 
 def learn_to_play():
-    boardsize = 9
-    our_agent = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
+    global RENDER_GAME
+    RENDER_GAME = True
+
+    fig, image = init_graphics()
+    our_agent = MCTSAgent(name="mcts", boardsize=BOARD_SIZE,  visited_states = 1000)
     while True:
-        training_game = Game(our_agent, our_agent, boardsize=boardsize, concede_threshold = 20)
+        training_game = Game(our_agent, our_agent, fig, image, boardsize=BOARD_SIZE, concede_threshold = 20)
         training_game.state.randomize(random.uniform(0.1, 0.9))
         training_game.run_game()
         our_agent.learn_from_game(training_game.state)
         our_agent.save()
         our_agent.reset()
 
-
 def just_play():
-    boardsize = 9
     player1_wins = 0
     player2_wins = 0
-    mcts = MCTSAgent(name="mcts", boardsize=boardsize,  visited_states = 1000)
-    for i in range(100):
+    mcts = MCTSAgent(name="mcts", boardsize=BOARD_SIZE,  visited_states = 10000)
+    global RENDER_GAME
+    RENDER_GAME = True
+    fig, image = init_graphics()
+    for i in range(1):
+        replay = ReplayAgent(r"record.txt", 0.5)
         mcts.reset()
         test = Game(
-            mcts,
+            replay, replay,
+            #mcts, mcts,
             # NeuralNetworkAgent(name="mcts", board_size=board_size),
-            RandomAgent(),
+            #RandomAgent(),
             # RandomAgent(),
-            boardsize=boardsize,
-            concede_threshold = 25)
+            fig, image,
+            boardsize=BOARD_SIZE,
+            concede_threshold = 20
+            ,record = r"record.txt"
+            )
         test.run_game()
         if test.state.winner() == -1:
             player1_wins += 1
@@ -410,8 +434,10 @@ def just_play():
             player2_wins += 1
     print("Player1 wins:", player1_wins)
     print("Player2 wins:", player2_wins)
+    
+
 
 
 if __name__ == '__main__':
-    learn_to_play()
-    #just_play()
+    #learn_to_play()
+    just_play()
