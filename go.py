@@ -4,7 +4,7 @@ import random
 import queue
 import abc
 import matplotlib
-from matplotlib import colors
+from matplotlib import colors, pyplot
 
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -27,6 +27,10 @@ class State:
         self.starting_player = starting_player
         self.image = image
         self.fig = fig
+
+    @property
+    def board_repr(self):
+        return self.board.reshape((self.boardsize, self.boardsize, 1))
 
     def get_possible_moves(self):
         self.add_possible_moves()
@@ -55,6 +59,10 @@ class State:
         return None
 
     def make_move(self, passes, x, y):
+        if self.empty_fields < 50 and abs(self.score()) > 50:
+            self.finished = True
+            self.active_player = -self.active_player
+            return True
         if passes:
             if self.passed:
                 self.finished = True
@@ -148,7 +156,7 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        return score + 6.5 * self.starting_player
+        return score + 0.5 * self.starting_player
 
     def print_state(self):  # this just blurts emojis into to the console, should this be improved?
         for i in range(self.boardsize + 2):
@@ -216,14 +224,22 @@ class Game:
                 self.state.draw_board()
             # print(self.state.score())
         winner = self.winner()
-        # if winner == 0:
-        #     print("Draw?")
-        # else:
-        #     print("Player {} won".format(winner))
 
 
 class Agent(abc.ABC):
+    def __init__(self, name=""):
+        self.name = name
+        self.epsilon = 0
+
+    def reduce_epsilon(self, d_epsilon):
+        self.epsilon = max(0, self.epsilon - d_epsilon)
     def move(self, state):
+        pass
+
+    def learn(self):
+        pass
+
+    def save(self):
         pass
 
 
@@ -240,7 +256,10 @@ class TrainingNeuralNetworkAgent(Agent):
         self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.05, inputs=(board_size, board_size, 1))
         self.epsilon = 1
         self.d_epsilon = 0.9999
-        self.learn = True
+        self.do_learn = True
+
+    def learn(self):
+        return self.nn.learn()
 
     def save(self):
         self.nn.save(self.name)
@@ -256,15 +275,19 @@ class TrainingNeuralNetworkAgent(Agent):
         max_score = 0
         self.epsilon *= self.d_epsilon
         input_board_size = best_move[3].board.shape[0]
+
         if np.random.rand() >= self.epsilon:
-            for move in possible_moves:
-                score = self.nn.predict(move[3].board.reshape((1, input_board_size, input_board_size, 1)))[0]
-                # self.nn.memorize(move[3], move[3].score())
+            next_possible_states = np.array([
+                move[3].board.reshape((input_board_size, input_board_size, 1)) for move in possible_moves])
+            next_scores = self.nn.predict(next_possible_states)
+            for index, score in enumerate(next_scores):
                 if score > max_score:
+                    best_move = possible_moves[index]
                     max_score = score
-                    best_move = move
-        if self.learn:
-            self.nn.memorize(best_move[3].board.reshape((input_board_size, input_board_size, 1)), best_move[3].score() * state.active_player)
+        best_state: State = best_move[3]
+
+        if self.do_learn:
+            self.nn.memorize(best_state.board_repr, (best_state.score()-state.score()) * state.active_player)
         return best_move[0], best_move[1], best_move[2]
 
 
@@ -278,10 +301,6 @@ class NeuralNetworkAgent(TrainingNeuralNetworkAgent):
 def init_graphics():
     fig = plt.figure()
     ax = fig.gca()
-    # ax.set_xticks(np.arange(-.5, 10, 1))
-    # ax.set_yticks(np.arange(-.5, 10, 1))
-    # ax.set_xticklabels(np.arange(1, 12, 1))
-    # ax.set_yticklabels(np.arange(1, 12, 1))
     plt.grid()
     fig.show()
     cmap = colors.ListedColormap(['red', 'white', 'blue'])  # Player2, Neutral, Player1
@@ -293,30 +312,31 @@ def learn_to_play():
     player1_wins = 0
     player2_wins = 0
 
+    logs = {"mse": [], "win delta": []}
+
+    end_episode = 500
+    epsilon_end_episode = 250
+    d_epsilon = 1/epsilon_end_episode
+
     fig, image = init_graphics()
 
     agent1 = TrainingNeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    agent1.epsilon = 0
-    # agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    # agent1.epsilon = 1
-    # agent1.d_epsilon = 0.99999
-    # agent1 = RandomAgent()
 
-    agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
-    agent2.epsilon = 0
-    # agent2 = RandomAgent()
-    for game_counter in range(1000):
-        # if agent1.epsilon < 0.05:
-        #     break
+    # agent2 = TrainingNeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
+    agent2 = RandomAgent()
+    for episode in range(end_episode):
         test = Game(
             agent1, agent2,
             fig, image,
             boardsize=BOARD_SIZE)
         test.run_game()
-        game_counter += 1
-        if game_counter % 10 == 0:
-            test.agent_one.save()
-            test.agent_two.save()
+        agent1_mse = agent1.learn()
+        agent1.reduce_epsilon(d_epsilon)
+        agent2.learn()
+        agent2.reduce_epsilon(d_epsilon)
+        if episode % 10 == 0:
+            agent1.save()
+            agent2.save()
         if test.winner() == 1:
             player1_wins += 1
         if test.winner() == -1:
@@ -324,10 +344,17 @@ def learn_to_play():
         if test.moves_count() < 50:
             time.sleep(1)
         print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
-            game_counter,
-            test.agent_two.epsilon,
+            episode,
+            agent1.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))
+        logs["mse"].append(agent1_mse)
+        logs["win delta"].append(player1_wins - player2_wins)
+
+    pyplot.ylim(0, 200)
+    pyplot.plot(logs["mse"])
+    pyplot.plot(logs["win delta"])
+    pyplot.show()
 
 
 def just_play():
@@ -340,8 +367,8 @@ def just_play():
 
     # agent1 = RandomAgent()
     agent1 = NeuralNetworkAgent(name="agent1", board_size=BOARD_SIZE)
-    # agent2 = RandomAgent()
-    agent2 = NeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
+    agent2 = RandomAgent()
+    # agent2 = NeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
 
     for game_counter in range(500):
         test = Game(
