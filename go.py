@@ -1,3 +1,4 @@
+import math
 import time
 import numpy as np
 import random
@@ -27,6 +28,8 @@ class State:
         self.starting_player = starting_player
         self.image = image
         self.fig = fig
+        self.move_candidates = [np.full((boardsize, boardsize), True), True]
+        self.candidates_evaluated = 0
 
     @property
     def board_repr(self):
@@ -64,6 +67,10 @@ class State:
         return None
 
     def make_move(self, passes, x, y):
+        if self.empty_fields < 50 and abs(self.score(1)) > 50:
+            self.finished = True
+            self.active_player = -self.active_player
+            return True
         if passes:
             if self.passed:
                 self.finished = True
@@ -160,9 +167,9 @@ class State:
             for y in range(self.boardsize):
                 colour, group = self.encircled(checked, (x, y), 0)
                 score += colour*len(group)+self.board[x,y]
-        score = score + 6.5 * self.starting_player
+        score = score + 0.5 * self.starting_player
         winner = score/abs(score)
-        score += 3 * int(self.finished) * winner
+        score += 1 * int(self.finished) * winner
         score *= player_nr
         # print(score)
         return score
@@ -273,7 +280,7 @@ class TrainingNeuralNetworkAgent(Agent):
     def __init__(self, name, player_nr, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.5, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.001, inputs=(board_size, board_size, 1))
         self.epsilon = 1
         self.do_learn = True
         self.player_nr = player_nr
@@ -283,9 +290,6 @@ class TrainingNeuralNetworkAgent(Agent):
 
     def save(self):
         self.nn.save(self.name)
-        
-    def priority_value(self, state):
-        return state.value + self.exploration * math.sqrt(math.log(state.previous_state.times_visited)/state.times_visited)
         
     def move(self, state):
         possible_moves = state.get_possible_moves()
@@ -342,7 +346,7 @@ def learn_to_play():
     player2_wins = 0
 
     end_episode = 500
-    epsilon_end_episode = 100
+    epsilon_end_episode = 250
     d_epsilon = 1/epsilon_end_episode
 
     global RENDER_GAME
@@ -379,8 +383,9 @@ def learn_to_play():
             player2_wins += 1
         if test.moves_count() < 50:
             time.sleep(1)
-        print("Game #{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
-            episode,
+        print("{}% - Game {}/{} - Epsilon: {} - Moves: {} - Score: {}:{}".format(
+            round(episode/end_episode*100, 2),
+            episode, end_episode,
             test.agent_one.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))

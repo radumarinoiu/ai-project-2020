@@ -33,15 +33,16 @@ class NeuralNetwork(object):
             self.model = loaded_model
         else:
             self.model = Sequential()
-            self.model.add(Conv2D(32, (3, 3), input_shape=inputs))
+            self.model.add(Conv2D(16, (3, 3), input_shape=inputs))
             self.model.add(Conv2D(24, (2, 2)))
+            self.model.add(Conv2D(32, (3, 1)))
             self.model.add(Flatten())
-            self.model.add(Dense(32, activation="relu"))
+            self.model.add(Dense(128, activation="relu"))
             self.model.add(Dense(32, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
         self.model.compile(loss='mse', optimizer=Adam(lr=learning_rate), metrics=["accuracy"])
-        self.memory = deque(maxlen=20000)
+        self.memory = deque(maxlen=80000)
         self.batch_size = 512
 
     def predict(self, inp):
@@ -49,10 +50,16 @@ class NeuralNetwork(object):
 
     def memorize(self, inp, out, reward, done):
         self.memory.append([inp, out, reward, done])
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory.append([inp, out, reward, done])
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory.append([inp, out, reward, done])
+        inp = np.rot90(inp, k=1, axes=(0, 1))
+        self.memory.append([inp, out, reward, done])
 
     def learn(self):
-        if len(self.memory) > self.batch_size * 2:
-            print("Learning")
+        if len(self.memory) > self.batch_size * 10:
+            # print("Learning")
             temp_mem = random.sample(self.memory, self.batch_size)
 
             next_states = np.array([elem[1] for elem in temp_mem])
@@ -83,4 +90,4 @@ class NeuralNetwork(object):
         with open("model_{}.json".format(name), "w") as json_file:
             json_file.write(model_json)
         self.model.save_weights("model_{}.h5".format(name))
-        print("\nSaved model to disk\n")
+        # print("\nSaved model to disk\n")
