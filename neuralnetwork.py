@@ -70,7 +70,7 @@ class NeuralNetwork(object):
                 np.array(labels),
                 epochs=1, verbose=0, batch_size=self.batch_size
             )
-            return history.history["mse"]
+            return history.history["mse"][0]
         # print("Learned")
         return 0
 

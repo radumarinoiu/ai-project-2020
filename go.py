@@ -315,8 +315,8 @@ def learn_to_play():
 
     logs = {"mse": [], "win delta": []}
 
-    end_episode = 500
-    epsilon_end_episode = 350
+    end_episode = 100
+    epsilon_end_episode = 1
     d_epsilon = 1/epsilon_end_episode
 
     fig, image = init_graphics()
