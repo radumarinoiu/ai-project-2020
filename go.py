@@ -7,7 +7,7 @@ import abc
 import matplotlib
 from matplotlib import colors, pyplot
 
-matplotlib.use("TkAgg")
+# matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 
@@ -315,8 +315,8 @@ def learn_to_play():
 
     logs = {"mse": [], "win delta": []}
 
-    end_episode = 100
-    epsilon_end_episode = 1
+    end_episode = 200
+    epsilon_end_episode = 100
     d_epsilon = 1/epsilon_end_episode
 
     fig, image = init_graphics()
@@ -406,6 +406,6 @@ def show_logs():
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
 if __name__ == '__main__':
-    learn_to_play()
+    # learn_to_play()
     # just_play()
-    # show_logs()
+    show_logs()
