@@ -72,6 +72,7 @@ class NeuralNetwork(object):
             )
             return history.history["mse"]
         # print("Learned")
+        return 0
 
     def save(self, name):
         # print("Saving model...")

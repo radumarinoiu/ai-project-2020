@@ -1,3 +1,4 @@
+import json
 import time
 import numpy as np
 import random
@@ -315,7 +316,7 @@ def learn_to_play():
     logs = {"mse": [], "win delta": []}
 
     end_episode = 500
-    epsilon_end_episode = 250
+    epsilon_end_episode = 350
     d_epsilon = 1/epsilon_end_episode
 
     fig, image = init_graphics()
@@ -348,10 +349,15 @@ def learn_to_play():
             agent1.epsilon,
             test.moves_count(),
             player1_wins, player2_wins))
-        logs["mse"].append(agent1_mse)
+        logs["mse"].append(float(agent1_mse))
         logs["win delta"].append(player1_wins - player2_wins)
 
-    pyplot.ylim(0, 200)
+    with open("logs.json", "w") as f:
+        f.write(json.dumps(logs))
+    pyplot.ylim(
+        np.min(np.array(logs["win delta"])),
+        np.max(np.array(logs["win delta"]))
+    )
     pyplot.plot(logs["mse"])
     pyplot.plot(logs["win delta"])
     pyplot.show()
@@ -370,7 +376,7 @@ def just_play():
     agent2 = RandomAgent()
     # agent2 = NeuralNetworkAgent(name="agent2", board_size=BOARD_SIZE)
 
-    for game_counter in range(500):
+    for game_counter in range(300):
         test = Game(
             agent1, agent2,
             fig, image,
@@ -384,6 +390,18 @@ def just_play():
             game_counter+1,
             test.moves_count(),
             player1_wins, player2_wins))
+
+
+def show_logs():
+    with open("logs.json", "r") as f:
+        logs = json.load(f.read())
+    pyplot.ylim(
+        np.min(np.array(logs["win delta"])),
+        np.max(np.array(logs["win delta"]))
+    )
+    pyplot.plot(logs["mse"])
+    pyplot.plot(logs["win delta"])
+    pyplot.show()
 
 
 # TODO: Monte Carlo Tree Search Agent as first step towards something similar to AlphaGo?
