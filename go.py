@@ -254,7 +254,7 @@ class TrainingNeuralNetworkAgent(Agent):
     def __init__(self, name, board_size=9):
         from neuralnetwork import NeuralNetwork
         self.name = name
-        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.05, inputs=(board_size, board_size, 1))
+        self.nn = NeuralNetwork(name=self.name, load=True, learning_rate=0.01, inputs=(board_size, board_size, 1))
         self.epsilon = 1
         self.d_epsilon = 0.9999
         self.do_learn = True
@@ -394,7 +394,7 @@ def just_play():
 
 def show_logs():
     with open("logs.json", "r") as f:
-        logs = json.load(f.read())
+        logs = json.load(f)
     pyplot.ylim(
         np.min(np.array(logs["win delta"])),
         np.max(np.array(logs["win delta"]))
@@ -408,3 +408,4 @@ def show_logs():
 if __name__ == '__main__':
     learn_to_play()
     # just_play()
+    # show_logs()

@@ -43,7 +43,7 @@ class NeuralNetwork(object):
             self.model.add(Dense(32, activation="relu"))
             self.model.add(Dense(1, activation="linear"))
         print(self.model.summary())
-        self.model.compile(loss='mse', optimizer=Adagrad(lr=learning_rate), metrics=["mse"])
+        self.model.compile(loss='mse', optimizer=Adam(lr=learning_rate), metrics=["mse"])
         self.memory = deque(maxlen=40000)
         self.batch_size = 1024
 
